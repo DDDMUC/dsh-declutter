@@ -1,0 +1,15 @@
+# dsh-declutter bundle patch: inserts the plugin row into the profile roster.
+#
+# The node half serves the loopback-only /dsh-declutter/* routes (the per-rule
+# self-check lives at GET /dsh-declutter/state). The browser half (exports
+# "./client") owns the view-side half of the same rule table: it reads the
+# selectors declared in src/logic.js, marks what it adopts with data-dshdc-*
+# attributes, and reports anchor health back to the host.
+#
+# The entry name is the BARE package name on purpose: the client-module scanner
+# treats it as a package specifier and resolves `<name>/package.json`, so a
+# subpath entry would be cached as "not a client package" and the browser half
+# would silently never load.
+- insert:
+    - id: dsh-declutter
+      name: 'dsh-declutter'

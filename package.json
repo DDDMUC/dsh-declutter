@@ -1,0 +1,51 @@
+{
+  "name": "dsh-declutter",
+  "version": "0.1.0",
+  "description": "View declutterer for DeepSeek Harness: collapse stale failure notices and annotate noisy turns, driven by one declarative rule table with a per-rule self-check. It never writes the session log.",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./src/client.js",
+    "./rules": "./src/logic.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "declutter",
+    "view",
+    "rule-table"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\""
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-chat",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-trajectory"
+      ]
+    },
+    "engines": {
+      "dsh": ">=0.1.6-alpha.2"
+    }
+  }
+}
