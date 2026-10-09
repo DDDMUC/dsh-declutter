@@ -51,7 +51,7 @@ window.__ModuleLoader__.load({
     const react = require('react')
 
     const NS = 'dsh-declutter'
-    const VERSION = '0.1.0'
+    const VERSION = '0.1.1'
     const ROUTE_PREFIX = '/dsh-declutter'
     // Same cadence the sibling plugins use for transcript polling.
     const REFRESH_INTERVAL_MS = 3000
