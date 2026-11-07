@@ -1,7 +1,6 @@
 {
   "name": "dsh-sidebar-declutter",
   "version": "0.1.0",
-  "private": true,
   "description": "DSH 侧栏整理：按开关收起品牌行、「新会话」按钮和三处「更多」，并可切换面板列表排布。纯样式注入，卸载即还原。",
   "type": "module",
   "main": "src/index.js",

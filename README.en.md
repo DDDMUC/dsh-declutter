@@ -6,9 +6,13 @@ Declutters the DSH sidebar: hides the brand row, the New session button and the 
 
 ## Install
 
-Open **Plugins → Add** in DSH and paste this repository, or install from the checkout:
+Open **Plugins → Add** in DSH and paste the package name or this repository:
 
 ```bash
+# npm (preferred)
+dsh plugin install dsh-sidebar-declutter
+
+# or straight from the repo
 dsh plugin install https://github.com/DDDMUC/dsh-sidebar-declutter
 ```
 

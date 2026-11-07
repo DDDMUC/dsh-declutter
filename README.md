@@ -6,9 +6,13 @@ DSH 侧栏整理插件：按开关收起顶部品牌行、「新会话」按钮�
 
 ## 安装
 
-在 DSH 的**插件**页 → 安装 → 填入本仓库地址，或直接引用本目录：
+在 DSH 的**插件**页 → 安装 → 填入包名或仓库地址：
 
 ```bash
+# npm（推荐）
+dsh plugin install dsh-sidebar-declutter
+
+# 或直接从仓库
 dsh plugin install https://github.com/DDDMUC/dsh-sidebar-declutter
 ```
 
