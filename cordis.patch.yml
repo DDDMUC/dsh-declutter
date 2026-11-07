@@ -1,0 +1,3 @@
+- insert:
+    - id: hide-new-session
+      name: dsh-hide-new-session

@@ -1,0 +1,55 @@
+{
+  "name": "dsh-hide-new-session",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DSH 侧栏收纳：隐藏顶部冗余的「新会话」按钮，把这一行让给下方的面板列表。纯样式注入，禁用即还原。",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./src/client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "sidebar"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ]
+    }
+  },
+  "author": {
+    "name": "DDDMUC",
+    "email": "175344510+DDDMUC@users.noreply.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DDDMUC/dsh-hide-new-session.git"
+  },
+  "homepage": "https://github.com/DDDMUC/dsh-hide-new-session#readme",
+  "bugs": {
+    "url": "https://github.com/DDDMUC/dsh-hide-new-session/issues"
+  }
+}

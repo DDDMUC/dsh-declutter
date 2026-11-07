@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Hide sidebar rows",
+    "description": "Hides the sidebar brand row, the New session button, and the three More launchers, each behind its own switch. Changes apply instantly and revert without a restart."
+  }
+}
