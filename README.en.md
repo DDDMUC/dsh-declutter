@@ -1,4 +1,4 @@
-# dsh-hide-new-session
+# dsh-sidebar-declutter
 
 English | [中文](README.md)
 
@@ -9,10 +9,10 @@ Declutters the DSH sidebar: hides the brand row, the New session button and the 
 Open **Plugins → Add** in DSH and paste this repository, or install from the checkout:
 
 ```bash
-dsh plugin install https://github.com/DDDMUC/dsh-hide-new-session
+dsh plugin install https://github.com/DDDMUC/dsh-sidebar-declutter
 ```
 
-Then open **Plugins → Installed → dsh-hide-new-session** and use the configure arrow on that bundle's row.
+Then open **Plugins → Installed → dsh-sidebar-declutter** and use the configure arrow on that bundle's row.
 
 ## Defaults
 

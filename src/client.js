@@ -1,4 +1,4 @@
-// dsh-hide-new-session — client half.
+// dsh-sidebar-declutter — client half.
 //
 // Each row is rendered straight into the layout by a shipped package, so none of
 // them is a slot registration and no config switch exists for any of them:
@@ -24,15 +24,17 @@
 // Settings live in localStorage rather than the loader Config: the entry needs no
 // Host schema, changes apply without a restart, and every surface reads one store.
 window.__ModuleLoader__.load({
-  id: 'dsh-hide-new-session',
+  id: 'dsh-sidebar-declutter',
   factory: (require) => {
     const React = require('react')
     const h = React.createElement
 
     /** Row-config key: `<bundle package>#<row id from the bundle patch>`. */
-    const ROW_CONFIG_KEY = 'dsh-hide-new-session#hide-new-session'
-    const STORE_KEY = 'dsh-hide-new-session'
-    const STYLE_ATTR = 'data-dsh-hide-new-session'
+    const ROW_CONFIG_KEY = 'dsh-sidebar-declutter#sidebar-declutter'
+    const STORE_KEY = 'dsh-sidebar-declutter'
+    /** Key this bundle stored its settings under before the rename. */
+    const LEGACY_STORE_KEY = 'dsh-hide-new-session'
+    const STYLE_ATTR = 'data-dsh-sidebar-declutter'
 
     /**
      * The page groups its switches under headings; the flat `FIELDS` below is
@@ -128,7 +130,7 @@ window.__ModuleLoader__.load({
     function readStore() {
       const next = { ...DEFAULTS }
       try {
-        const raw = localStorage.getItem(STORE_KEY)
+        const raw = localStorage.getItem(STORE_KEY) ?? localStorage.getItem(LEGACY_STORE_KEY)
         if (raw === null) return next
         const parsed = JSON.parse(raw)
         for (const field of FIELDS) {
@@ -292,7 +294,7 @@ window.__ModuleLoader__.load({
         tag.setAttribute(STYLE_ATTR, '1')
         document.head.appendChild(tag)
       }
-      const css = '/* dsh-hide-new-session */\n' + hiddenRules().join('\n') + '\n' + FORM_CSS
+      const css = '/* dsh-sidebar-declutter */\n' + hiddenRules().join('\n') + '\n' + FORM_CSS
       // The tag outlives the module instance: a newer build re-executing in the
       // same document must rewrite it rather than keep the old stylesheet.
       if (tag.textContent !== css) tag.textContent = css
@@ -408,7 +410,7 @@ window.__ModuleLoader__.load({
               if (document.querySelector('[class*="_panelList"]') === null) return
               if (document.querySelector('button[class*="_newSession"]') !== null) return
               console.warn(
-                '[dsh-hide-new-session] 侧栏已渲染但没匹配到新会话按钮，选择器可能随版本变化。',
+                '[dsh-sidebar-declutter] 侧栏已渲染但没匹配到新会话按钮，选择器可能随版本变化。',
               )
             }, 2000)
           }
@@ -417,7 +419,7 @@ window.__ModuleLoader__.load({
             if (timer !== null) clearTimeout(timer)
             if (tag !== null) tag.remove()
           }
-        }, 'dsh-hide-new-session: stylesheet')
+        }, 'dsh-sidebar-declutter: stylesheet')
 
         ctx.effect(() =>
           ctx.slots.inject('plugins.row.config', () =>

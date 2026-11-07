@@ -1,4 +1,4 @@
-# dsh-hide-new-session
+# dsh-sidebar-declutter
 
 [English](README.en.md) | 中文
 
@@ -9,10 +9,10 @@ DSH 侧栏整理插件：按开关收起顶部品牌行、「新会话」按钮�
 在 DSH 的**插件**页 → 安装 → 填入本仓库地址，或直接引用本目录：
 
 ```bash
-dsh plugin install https://github.com/DDDMUC/dsh-hide-new-session
+dsh plugin install https://github.com/DDDMUC/dsh-sidebar-declutter
 ```
 
-装好后打开 **插件 → 已安装 → dsh-hide-new-session**，点该 bundle 下面那一行的配置箭头即可调整。
+装好后打开 **插件 → 已安装 → dsh-sidebar-declutter**，点该 bundle 下面那一行的配置箭头即可调整。
 
 ## 默认设置
 
@@ -20,11 +20,9 @@ dsh plugin install https://github.com/DDDMUC/dsh-hide-new-session
 - 排布：一行两个
 - 会话头部 View 行的 `⋯` 默认**不**隐藏
 
-> 包名是历史遗留的：最初只藏「新会话」按钮，后来陆续加了「更多」、品牌行和两列布局。改名要卸载重装、会打断已经生效的状态，所以只把插件页显示的标题改成了「隐藏侧栏冗余行」。
-
 ## 设置页
 
-注册在 `plugins.row.config`，key 是 `<包名>#<patch 行 id>` = `dsh-hide-new-session#hide-new-session`。打开路径：**插件 → 已安装 → dsh-hide-new-session → 该 bundle 下面那行的配置箭头**。行摘要会直接显示「已隐藏：…」。
+注册在 `plugins.row.config`，key 是 `<包名>#<patch 行 id>` = `dsh-sidebar-declutter#sidebar-declutter`。打开路径：**插件 → 已安装 → dsh-sidebar-declutter → 该 bundle 下面那行的配置箭头**。行摘要会直接显示「已隐藏：…」。
 
 六个开关分两组，改动立即生效，不重启插件、不重载页面：
 
@@ -48,7 +46,7 @@ dsh plugin install https://github.com/DDDMUC/dsh-hide-new-session
 
 旧版本存的是布尔值 `panelGrid`：`true` 迁移为 `two`（该键最初就是「一行两个」的意思），`false` 迁移为 `stack`。存储值非法时回落到默认。
 
-值存在浏览器 `localStorage["dsh-hide-new-session"]`，不写 profile 配置：因此这个 bundle 不需要 Host 侧 Config schema，改一个开关也不会重启插件。代价是偏好跟着浏览器走，换浏览器或清站点数据会回到默认。
+值存在浏览器 `localStorage["dsh-sidebar-declutter"]`，不写 profile 配置：因此这个 bundle 不需要 Host 侧 Config schema，改一个开关也不会重启插件。代价是偏好跟着浏览器走，换浏览器或清站点数据会回到默认。
 
 ## 排布：三选一
 
@@ -175,7 +173,7 @@ macOS 桌面端品牌行只有装饰用的 span（折叠按钮在上方那条 `t
   - `button[class*="_newSession"] { display: none !important }`
   - `[class*="_panelList"] [class*="_moreAnchor"]`, `[class*="_panelList"] button[aria-haspopup="menu"]` → `display: none !important`
 - 选择器锚在 CSS Module 的**本地名后缀**上，不用构建哈希前缀（前缀每次构建都变，本地名跟随源码）；「更多」另有一条纯结构选择器兜底
-- 样式表带 `data-dsh-hide-new-session` 标记，重复执行会就地重写而不是叠加
+- 样式表带 `data-dsh-sidebar-declutter` 标记，重复执行会就地重写而不是叠加
 - 2 秒后自检：侧栏已渲染（存在 `_panelList`）但仍匹配不到按钮时，控制台 `console.warn` 提示选择器可能已随版本变化——不会静默失效
 
 ## 还原
