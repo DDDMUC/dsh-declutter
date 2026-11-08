@@ -65,7 +65,7 @@ window.__ModuleLoader__.load({
           {
             key: 'fnRow',
             title: '在面板列表里放一个功能按钮',
-            hint: '面板列表本身只接受入口，所以这一行由插件自己插入：点一次收起左栏所有项，再点一次全部恢复。它自己不会被收起。',
+            hint: '面板列表本身只接受入口，所以这一行由插件自己插入：点一次收起「更多」和全部面板，再点一次恢复。品牌行与「新会话」不参与，它们只看自己的开关。',
           },
         ],
       },
@@ -140,6 +140,9 @@ window.__ModuleLoader__.load({
       hiddenPanels: [],
       /** Whether the panel list carries our own action row. */
       fnRow: true,
+      /** Set by the row's 全部收起/全部展开 toggle, so the label never has to be
+       * inferred from a possibly-empty panel registry. */
+      allCollapsed: false,
     }
 
     /** Accepted values of the layout choice, keyed by field. */
@@ -196,7 +199,7 @@ window.__ModuleLoader__.load({
 
     function setValue(key, value) {
       if (values[key] === value) return
-      values = { ...values, [key]: value }
+      values = { ...values, [key]: value, ...(LEFT_KEYS.includes(key) ? { allCollapsed: false } : {}) }
       writeStore()
       syncStyle()
       syncFunctionRow()
@@ -293,6 +296,15 @@ window.__ModuleLoader__.load({
           'button[class*="_viewsMore"]{display:none!important}',
         )
       }
+      if (values.allCollapsed === true) {
+        // Blanket rule: covers panels the registry has not reported yet, and any
+        // panel installed later. The row this bundle injects keeps its own
+        // attribute so the control never hides itself.
+        rules.push(
+          '[class*="_panelList"] > button[aria-label]:not([data-dsh-fn-row])'
+            + '{display:none!important}',
+        )
+      }
       for (const id of values.hiddenPanels) {
         const entry = panelEntries.find((one) => one.id === id)
         // The DOM carries no panel id — the button's accessible name is the one
@@ -381,9 +393,12 @@ window.__ModuleLoader__.load({
       + '<path d="M6.5 6.9C4.6 8.2 3.2 10 2.5 12c1.4 3.6 5 6 9.5 6 1.6 0 3.1-.35 4.4-1"/>'
       + '<path d="M19.4 15.1c.9-1 1.6-2 2.1-3.1-1.4-3.6-5-6-9.5-6-.9 0-1.8.1-2.6.35"/></svg>'
 
-    /** The switches this row drives. `fnRow` stays out: hiding the control would
-     * remove the only way to bring everything back. */
-    const LEFT_KEYS = ['brand', 'newSession', 'sidebarMore']
+    /**
+     * What the row drives: the panel list and its panels. The brand row and the
+     * New session button sit above it and are deliberately out of scope — they
+     * stay whatever their own switches say, and `fnRow` is the control itself.
+     */
+    const LEFT_KEYS = ['sidebarMore']
 
     /** Whether every left-column item is currently hidden. */
     function leftAllHidden() {
@@ -392,23 +407,14 @@ window.__ModuleLoader__.load({
       return switches && panels
     }
 
+
     function toggleAllLeft() {
-      if (leftAllHidden()) {
-        values = {
-          ...values,
-          brand: false,
-          newSession: false,
-          sidebarMore: false,
-          hiddenPanels: [],
-        }
-      } else {
-        values = {
-          ...values,
-          brand: true,
-          newSession: true,
-          sidebarMore: true,
-          hiddenPanels: panelEntries.map((entry) => entry.id),
-        }
+      const collapse = values.allCollapsed !== true
+      values = {
+        ...values,
+        allCollapsed: collapse,
+        sidebarMore: collapse,
+        hiddenPanels: collapse ? panelEntries.map((entry) => entry.id) : [],
       }
       writeStore()
       syncStyle()
@@ -417,13 +423,13 @@ window.__ModuleLoader__.load({
     }
 
     function functionRowLabel() {
-      return leftAllHidden() ? '全部展开' : '全部收起'
+      return values.allCollapsed === true ? '全部展开' : '全部收起'
     }
 
     /** Keep the row's text and pressed state in step with the switches. */
     function refreshFunctionRow() {
       if (fnRowButton === null) return
-      fnRowButton.setAttribute('aria-pressed', leftAllHidden() ? 'true' : 'false')
+      fnRowButton.setAttribute('aria-pressed', values.allCollapsed === true ? 'true' : 'false')
       fnRowButton.setAttribute('aria-label', functionRowLabel())
       const label = fnRowButton.children[1]
       if (label !== undefined) label.textContent = functionRowLabel()
@@ -461,7 +467,7 @@ window.__ModuleLoader__.load({
       // rules) treat it exactly like a panel row.
       row.className = sample.className
       row.setAttribute('aria-label', functionRowLabel())
-      row.setAttribute('aria-pressed', leftAllHidden() ? 'true' : 'false')
+      row.setAttribute('aria-pressed', values.allCollapsed === true ? 'true' : 'false')
 
       const glyph = document.createElement('span')
       const sampleGlyph = sample.firstElementChild
@@ -793,7 +799,7 @@ window.__ModuleLoader__.load({
         const next = on
           ? values.hiddenPanels.includes(id) ? values.hiddenPanels : [...values.hiddenPanels, id]
           : values.hiddenPanels.filter((one) => one !== id)
-        values = { ...values, hiddenPanels: next }
+        values = { ...values, hiddenPanels: next, allCollapsed: false }
         writeStore()
         syncStyle()
         notify()
