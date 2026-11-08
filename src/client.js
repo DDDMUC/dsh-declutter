@@ -62,11 +62,6 @@ window.__ModuleLoader__.load({
             title: '左栏面板列表的「更多」',
             hint: '收起这一行后，面板将无法再取消固定，已固定的面板会一直列在侧栏。',
           },
-          {
-            key: 'fnRow',
-            title: '在面板列表里放一个功能按钮',
-            hint: '面板列表本身只接受入口，所以这一行由插件自己插入：点一次收起「更多」和全部面板，再点一次恢复。品牌行与「新会话」不参与，它们只看自己的开关。',
-          },
         ],
       },
       {
@@ -138,11 +133,6 @@ window.__ModuleLoader__.load({
       picked: [],
       /** Panel ids (from `sidebar.panellist`) the user ticked off. */
       hiddenPanels: [],
-      /** Whether the panel list carries our own action row. */
-      fnRow: true,
-      /** Set by the row's 全部收起/全部展开 toggle, so the label never has to be
-       * inferred from a possibly-empty panel registry. */
-      allCollapsed: false,
     }
 
     /** Accepted values of the layout choice, keyed by field. */
@@ -199,10 +189,9 @@ window.__ModuleLoader__.load({
 
     function setValue(key, value) {
       if (values[key] === value) return
-      values = { ...values, [key]: value, ...(LEFT_KEYS.includes(key) ? { allCollapsed: false } : {}) }
+      values = { ...values, [key]: value }
       writeStore()
       syncStyle()
-      syncFunctionRow()
       for (const listener of [...listeners]) {
         try {
           listener()
@@ -296,15 +285,6 @@ window.__ModuleLoader__.load({
           'button[class*="_viewsMore"]{display:none!important}',
         )
       }
-      if (values.allCollapsed === true) {
-        // Blanket rule: covers panels the registry has not reported yet, and any
-        // panel installed later. The row this bundle injects keeps its own
-        // attribute so the control never hides itself.
-        rules.push(
-          '[class*="_panelList"] > button[aria-label]:not([data-dsh-fn-row])'
-            + '{display:none!important}',
-        )
-      }
       for (const id of values.hiddenPanels) {
         const entry = panelEntries.find((one) => one.id === id)
         // The DOM carries no panel id — the button's accessible name is the one
@@ -374,160 +354,16 @@ window.__ModuleLoader__.load({
       return tag
     }
 
-    // --- function row ----------------------------------------------------------
-    // `sidebar.panellist` rows are navigation by contract — clicking one runs
-    // `selectPanel(id)`, and the id must address a main panel. There is no seat
-    // for an action in that list, so this row is inserted into the rendered nav.
-    // It copies the class names of a real panel row (including the build hash) so
-    // it inherits the exact styling, and a MutationObserver restores it if React
-    // replaces the list.
+    // --- stale row cleanup ------------------------------------------------------
+    // An earlier build injected an action row into the panel list. That row could
+    // end up spanning the whole window when the anchor resolved to the wrong
+    // container, so the feature is gone; any node a previous instance left behind
+    // is removed on load.
 
-    const FN_ROW_ATTR = 'data-dsh-fn-row'
-    let fnObserver = null
-    let fnRowButton = null
-
-    const FN_ICON =
-      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-      + 'stroke-width="1.6" aria-hidden="true"><path d="M3 3l18 18"/>'
-      + '<path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/>'
-      + '<path d="M6.5 6.9C4.6 8.2 3.2 10 2.5 12c1.4 3.6 5 6 9.5 6 1.6 0 3.1-.35 4.4-1"/>'
-      + '<path d="M19.4 15.1c.9-1 1.6-2 2.1-3.1-1.4-3.6-5-6-9.5-6-.9 0-1.8.1-2.6.35"/></svg>'
-
-    /**
-     * What the row drives: the panel list and its panels. The brand row and the
-     * New session button sit above it and are deliberately out of scope — they
-     * stay whatever their own switches say, and `fnRow` is the control itself.
-     */
-    const LEFT_KEYS = ['sidebarMore']
-
-    /** Whether every left-column item is currently hidden. */
-    function leftAllHidden() {
-      const switches = LEFT_KEYS.every((key) => values[key] === true)
-      const panels = panelEntries.every((entry) => values.hiddenPanels.includes(entry.id))
-      return switches && panels
-    }
-
-
-    function toggleAllLeft() {
-      const collapse = values.allCollapsed !== true
-      values = {
-        ...values,
-        allCollapsed: collapse,
-        sidebarMore: collapse,
-        hiddenPanels: collapse ? panelEntries.map((entry) => entry.id) : [],
-      }
-      writeStore()
-      syncStyle()
-      syncFunctionRow()
-      notify()
-    }
-
-    function functionRowLabel() {
-      return values.allCollapsed === true ? '全部展开' : '全部收起'
-    }
-
-    /** Keep the row's text and pressed state in step with the switches. */
-    function refreshFunctionRow() {
-      if (fnRowButton === null) return
-      fnRowButton.setAttribute('aria-pressed', values.allCollapsed === true ? 'true' : 'false')
-      fnRowButton.setAttribute('aria-label', functionRowLabel())
-      const label = fnRowButton.children[1]
-      if (label !== undefined) label.textContent = functionRowLabel()
-    }
-
-    function removeFunctionRow() {
-      if (fnRowButton !== null) {
-        fnRowButton.remove()
-        fnRowButton = null
-      }
-    }
-
-    /** Insert (or refresh) the action row inside the rendered panel list. */
-    /** Every row this attribute marks, wherever a previous module instance left it. */
-    function allFunctionRows() {
-      if (typeof document === 'undefined') return []
-      return Array.from(document.querySelectorAll('[' + FN_ROW_ATTR + ']'))
-    }
-
-    function syncFunctionRow() {
+    function removeStaleActionRows() {
       if (typeof document === 'undefined') return
-      if (!values.fnRow) {
-        for (const stale of allFunctionRows()) stale.remove()
-        fnRowButton = null
-        return
-      }
-      const nav = document.querySelector('[class*="_panelList"]')
-      if (nav === null) return
-
-      // A hot swap re-runs this module with fresh state while the previous
-      // instance's row is still in the page. Anything that is not exactly the one
-      // row this instance owns is stale and must go, or the list gains a copy per
-      // reload.
-      const existing = allFunctionRows()
-      const owned = existing.length === 1 && existing[0] === fnRowButton && fnRowButton.parentElement === nav
-      if (owned) {
-        refreshFunctionRow()
-        return
-      }
-      for (const stale of existing) stale.remove()
-      fnRowButton = null
-
-      const sample = nav.querySelector(':scope > button:not([' + FN_ROW_ATTR + '])')
-      if (sample === null) return
-      const row = document.createElement('button')
-      row.type = 'button'
-      row.setAttribute(FN_ROW_ATTR, '1')
-      // Copy the live row class names so the styling (and the grid/wrap layout
-      // rules) treat it exactly like a panel row.
-      row.className = sample.className
-      row.setAttribute('aria-label', functionRowLabel())
-      row.setAttribute('aria-pressed', values.allCollapsed === true ? 'true' : 'false')
-
-      const glyph = document.createElement('span')
-      const sampleGlyph = sample.firstElementChild
-      if (sampleGlyph !== null) glyph.className = sampleGlyph.className
-      glyph.setAttribute('aria-hidden', 'true')
-      glyph.style.display = 'inline-flex'
-      glyph.style.alignItems = 'center'
-      glyph.style.justifyContent = 'center'
-      glyph.innerHTML = FN_ICON
-
-      const label = document.createElement('span')
-      const sampleLabel = sample.children.length > 1 ? sample.children[1] : null
-      if (sampleLabel !== null) label.className = sampleLabel.className
-      label.textContent = functionRowLabel()
-
-      row.append(glyph, label)
-      row.addEventListener('click', (event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        toggleAllLeft()
-      })
-
-      nav.appendChild(row)
-      fnRowButton = row
-    }
-
-    /** Watch the document for the list being re-rendered and put the row back. */
-    function watchFunctionRow() {
-      if (typeof MutationObserver === 'undefined' || typeof document === 'undefined') return null
-      let scheduled = false
-      fnObserver = new MutationObserver(() => {
-        if (scheduled) return
-        scheduled = true
-        requestAnimationFrame(() => {
-          scheduled = false
-          syncFunctionRow()
-          refreshFunctionRow()
-        })
-      })
-      fnObserver.observe(document.body, { childList: true, subtree: true })
-      syncFunctionRow()
-      return () => {
-        fnObserver?.disconnect()
-        fnObserver = null
-        removeFunctionRow()
-      }
+      if (typeof document.querySelectorAll !== 'function') return
+      for (const stale of document.querySelectorAll('[data-dsh-fn-row]')) stale.remove()
     }
 
     // --- pick mode -------------------------------------------------------------
@@ -673,7 +509,6 @@ window.__ModuleLoader__.load({
       if (picker.outlined !== null) picker.outlined.style.outline = picker.savedOutline
       picker.bar.remove()
       picker = null
-      syncFunctionRow()
       notify()
     }
 
@@ -765,7 +600,6 @@ window.__ModuleLoader__.load({
       document.addEventListener('click', state.onClick, true)
       document.addEventListener('keydown', state.onKeyDown, true)
       picker = state
-      syncFunctionRow()
       notify()
     }
 
@@ -844,7 +678,7 @@ window.__ModuleLoader__.load({
         const next = on
           ? values.hiddenPanels.includes(id) ? values.hiddenPanels : [...values.hiddenPanels, id]
           : values.hiddenPanels.filter((one) => one !== id)
-        values = { ...values, hiddenPanels: next, allCollapsed: false }
+        values = { ...values, hiddenPanels: next }
         writeStore()
         syncStyle()
         notify()
@@ -1021,16 +855,14 @@ window.__ModuleLoader__.load({
         }, 'dsh-sidebar-declutter: stylesheet')
 
         ctx.effect(() => {
-          const stopWatching = watchFunctionRow()
+          removeStaleActionRows()
           registerTeardown(() => {
             if (picker !== null) stopPicker()
-            stopWatching?.()
           })
           return () => {
             if (picker !== null) stopPicker()
-            stopWatching?.()
           }
-        }, 'dsh-sidebar-declutter: function row')
+        }, 'dsh-sidebar-declutter: teardown')
 
         ctx.effect(() =>
           ctx.slots.inject('plugins.row.config', () =>
