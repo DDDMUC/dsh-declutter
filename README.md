@@ -30,13 +30,19 @@ dsh plugin install https://github.com/DDDMUC/dsh-sidebar-declutter
 
 六个开关分两组，改动立即生效，不重启插件、不重载页面：
 
-**隐藏**
+**左栏**
 
 | 键 | 默认 | 收起的面 |
 |---|---|---|
 | `brand` | 开 | 顶部品牌行（deepseek HARNESS） |
 | `newSession` | 开 | 侧栏「新会话」按钮 |
 | `sidebarMore` | 开 | 左栏面板列表的「更多」 |
+| `hiddenPanels` | 空 | 勾掉列表里的任意面板（自动枚举，见下） |
+
+**其它位置**
+
+| 键 | 默认 | 收起的面 |
+|---|---|---|
 | `rightMore` | 开 | 右侧栏起始页的「更多」 |
 | `headerMore` | 关 | 会话头部 View 行的 `⋯` |
 

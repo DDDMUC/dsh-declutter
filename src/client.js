@@ -44,7 +44,8 @@ window.__ModuleLoader__.load({
     const SECTIONS = [
       {
         kind: 'hide',
-        title: '隐藏',
+        title: '左栏',
+        panels: true,
         fields: [
           {
             key: 'brand',
@@ -61,6 +62,12 @@ window.__ModuleLoader__.load({
             title: '左栏面板列表的「更多」',
             hint: '收起这一行后，面板将无法再取消固定，已固定的面板会一直列在侧栏。',
           },
+        ],
+      },
+      {
+        kind: 'hide',
+        title: '其它位置',
+        fields: [
           {
             key: 'rightMore',
             title: '右侧栏起始页的「更多」',
@@ -100,12 +107,6 @@ window.__ModuleLoader__.load({
             ],
           },
         ],
-      },
-      {
-        kind: 'panels',
-        title: '左栏面板',
-        hint: '这些是当前注册到侧栏的面板，来源是它们自己的 slot 登记——新装插件会自己出现在这里。',
-        fields: [],
       },
       {
         kind: 'picked',
@@ -328,6 +329,8 @@ window.__ModuleLoader__.load({
       '.dhns-btn:hover{background:var(--dsw-alias-interactive-bg-hover)}',
       '.dhns-btn[data-tone=primary]{background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-primary,#fff);',
       'border-color:var(--dsw-alias-label-primary)}',
+      '.dhns-subhead{font-size:12px;font-weight:500;letter-spacing:.02em;',
+      'color:var(--dsw-alias-label-secondary);margin-top:4px}',
       '.dhns-picked{display:flex;flex-direction:column;gap:6px;margin-top:4px}',
       '.dhns-pickedRow{display:flex;align-items:center;gap:10px;padding:6px 10px;',
       'border-radius:var(--dsw-radius-md,8px);border:1px solid var(--dsw-alias-border-secondary,rgba(128,128,128,.18))}',
@@ -645,6 +648,7 @@ window.__ModuleLoader__.load({
         return h(
           'div',
           { className: 'dhns-rows' },
+          h('div', { className: 'dhns-subhead', key: 'subhead' }, '面板'),
           panelEntries.map((entry) =>
             h(
               'label',
@@ -735,9 +739,9 @@ window.__ModuleLoader__.load({
                 ? null
                 : h('span', { className: 'dhns-sectionHint' }, section.hint),
             ),
-            section.kind === 'panels' ? panelBlock() : null,
             section.kind === 'picked' ? pickedBlock() : null,
             section.fields.length === 0 ? null : h('div', { className: 'dhns-rows' }, section.fields.map(renderField)),
+            section.panels === true ? panelBlock() : null,
           ),
         ),
       )
