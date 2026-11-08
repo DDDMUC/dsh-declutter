@@ -539,6 +539,27 @@ window.__ModuleLoader__.load({
     let picker = null
 
     /**
+     * Teardown handles that outlive one module instance. A hot swap re-runs this
+     * module with fresh state while the previous instance's document listeners
+     * are still attached; without this the old capture handler keeps swallowing
+     * every click in the page.
+     */
+    const TEARDOWN_KEY = '__dshSidebarDeclutterTeardown'
+
+    function registerTeardown(fn) {
+      if (typeof window === 'undefined') return
+      const previous = window[TEARDOWN_KEY]
+      if (typeof previous === 'function') {
+        try {
+          previous()
+        } catch {
+          // A broken previous instance must not stop this one.
+        }
+      }
+      window[TEARDOWN_KEY] = fn
+    }
+
+    /**
      * Live view of what is registered into the sidebar's panel list, mirrored
      * from the slot registry the sidebar itself renders from. Each entry is
      * `{ id, order, label }`; the label is what the rendered button carries as
@@ -648,6 +669,7 @@ window.__ModuleLoader__.load({
       if (picker === null) return
       document.removeEventListener('click', picker.onClick, true)
       document.removeEventListener('mousemove', picker.onMove, true)
+      document.removeEventListener('keydown', picker.onKeyDown, true)
       if (picker.outlined !== null) picker.outlined.style.outline = picker.savedOutline
       picker.bar.remove()
       picker = null
@@ -731,8 +753,17 @@ window.__ModuleLoader__.load({
         }
       }
 
+      state.onKeyDown = (event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          event.stopPropagation()
+          stopPicker()
+        }
+      }
+
       document.addEventListener('mousemove', state.onMove, true)
       document.addEventListener('click', state.onClick, true)
+      document.addEventListener('keydown', state.onKeyDown, true)
       picker = state
       syncFunctionRow()
       notify()
@@ -989,7 +1020,17 @@ window.__ModuleLoader__.load({
           }
         }, 'dsh-sidebar-declutter: stylesheet')
 
-        ctx.effect(() => watchFunctionRow(), 'dsh-sidebar-declutter: function row')
+        ctx.effect(() => {
+          const stopWatching = watchFunctionRow()
+          registerTeardown(() => {
+            if (picker !== null) stopPicker()
+            stopWatching?.()
+          })
+          return () => {
+            if (picker !== null) stopPicker()
+            stopWatching?.()
+          }
+        }, 'dsh-sidebar-declutter: function row')
 
         ctx.effect(() =>
           ctx.slots.inject('plugins.row.config', () =>
