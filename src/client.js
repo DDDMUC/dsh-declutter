@@ -386,24 +386,21 @@ window.__ModuleLoader__.load({
     let fnObserver = null
     let fnScheduled = false
 
-    /** The panel list inside the sidebar column, or null when it is not there. */
-    function findPanelNav() {
+    /**
+     * The top strip: the row holding the sidebar's collapse toggle. Its own
+     * `data-sidebar-toggle` attribute is the anchor, so `parentElement` is the
+     * strip itself — no class-suffix guessing, and nothing else can match.
+     */
+    function findTopStrip() {
       if (typeof document === 'undefined') return null
-      const toggles = document.querySelectorAll('[data-sidebar-toggle]')
-      for (const toggle of toggles) {
-        let node = toggle.parentElement
-        while (node !== null && node !== document.body) {
-          const nav = node.querySelector('[class*="_panelList"]')
-          if (nav !== null && nav.querySelector(':scope > button[aria-label]') !== null) {
-            const rect = nav.getBoundingClientRect()
-            // A sidebar column is a few hundred pixels wide; a match that fills
-            // the window is a different component with a colliding local name.
-            if (rect.width > 0 && rect.width < 520) return nav
-          }
-          node = node.parentElement
-        }
-      }
-      return null
+      const toggle = document.querySelector('[data-sidebar-toggle]')
+      if (toggle === null) return null
+      const strip = toggle.parentElement
+      if (strip === null || strip === document.body) return null
+      const rect = strip.getBoundingClientRect()
+      // A sidebar strip; anything wider is a different layout entirely.
+      if (rect.width === 0 || rect.width > 520) return null
+      return { strip, toggle }
     }
 
     function allFunctionRows() {
@@ -439,10 +436,10 @@ window.__ModuleLoader__.load({
 
     function refreshFunctionRow() {
       if (fnRowButton === null) return
+      const label = functionRowLabel()
       fnRowButton.setAttribute('aria-pressed', values.allCollapsed === true ? 'true' : 'false')
-      fnRowButton.setAttribute('aria-label', functionRowLabel())
-      const label = fnRowButton.children[1]
-      if (label !== undefined) label.textContent = functionRowLabel()
+      fnRowButton.setAttribute('aria-label', label)
+      fnRowButton.setAttribute('title', label)
     }
 
     const FN_ICON =
@@ -458,56 +455,57 @@ window.__ModuleLoader__.load({
         removeFunctionRow()
         return
       }
-      const nav = findPanelNav()
-      if (nav === null) return
+      const found = findTopStrip()
+      if (found === null) return
+      const { strip, toggle } = found
 
       const existing = allFunctionRows()
       const owned =
-        existing.length === 1 && existing[0] === fnRowButton && fnRowButton.parentElement === nav
+        existing.length === 1 && existing[0] === fnRowButton && fnRowButton.parentElement === strip
       if (owned) {
         refreshFunctionRow()
         return
       }
       removeFunctionRow()
 
-      const sample = nav.querySelector(':scope > button[aria-label]')
-      if (sample === null) return
-
       const row = document.createElement('button')
       row.type = 'button'
       row.setAttribute(FN_ROW_ATTR, '1')
-      row.className = sample.className
-      // Never inherit a positioning scheme from wherever the classes came from.
-      row.style.position = 'static'
+      // Reuse the toggle's own button class so geometry and hover match, minus
+      // the toggle-specific one.
+      const buttonClass = String(toggle.className)
+        .split(/\s+/)
+        .filter((one) => one !== '' && !/_toggle\b/.test(one))
+        .join(' ')
+      if (buttonClass !== '') row.className = buttonClass
       row.setAttribute('aria-label', functionRowLabel())
       row.setAttribute('aria-pressed', values.allCollapsed === true ? 'true' : 'false')
+      row.setAttribute('title', functionRowLabel())
+      // The strip is a window-drag region; without this the click starts a drag.
+      row.style.webkitAppRegion = 'no-drag'
+      row.style.display = 'inline-flex'
+      row.style.alignItems = 'center'
+      row.style.justifyContent = 'center'
+      row.style.background = 'none'
+      row.style.border = 'none'
+      row.style.padding = '0'
+      row.style.cursor = 'pointer'
+      row.style.color = 'inherit'
+      row.innerHTML = FN_ICON
 
-      const glyph = document.createElement('span')
-      const sampleGlyph = sample.firstElementChild
-      if (sampleGlyph !== null) glyph.className = sampleGlyph.className
-      glyph.setAttribute('aria-hidden', 'true')
-      glyph.innerHTML = FN_ICON
-
-      const label = document.createElement('span')
-      const sampleLabel = sample.children.length > 1 ? sample.children[1] : null
-      if (sampleLabel !== null) label.className = sampleLabel.className
-      label.textContent = functionRowLabel()
-
-      row.append(glyph, label)
       row.addEventListener('click', (event) => {
         event.preventDefault()
         event.stopPropagation()
         toggleAllLeft()
       })
-      nav.appendChild(row)
+      strip.insertBefore(row, toggle)
 
-      // Self-check: a sane row is about as big as a panel row. Anything that
-      // reports window-sized geometry is an accident, not a row.
-      const navRect = nav.getBoundingClientRect()
+      // Self-check: this seat holds one 28px icon button. Anything that reports
+      // more than that is not a button, and is undone immediately.
       const rowRect = row.getBoundingClientRect()
-      if (rowRect.width > navRect.width + 32 || rowRect.height > 96) {
+      if (rowRect.width > 56 || rowRect.height > 56) {
         row.remove()
-        console.warn('[dsh-sidebar-declutter] 功能行尺寸异常，已回退（未注入）。')
+        console.warn('[dsh-sidebar-declutter] 功能按钮尺寸异常，已回退（未注入）。')
         return
       }
       fnRowButton = row

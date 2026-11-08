@@ -58,13 +58,15 @@ dsh plugin install https://github.com/DDDMUC/dsh-sidebar-declutter
 
 值存在浏览器 `localStorage["dsh-sidebar-declutter"]`，不写 profile 配置：因此这个 bundle 不需要 Host 侧 Config schema，改一个开关也不会重启插件。代价是偏好跟着浏览器走，换浏览器或清站点数据会回到默认。
 
-## 面板列表里的功能按钮
+## 顶栏的功能按钮
 
 `sidebar.panellist` 的每一行都是**导航**：点击等于 `selectPanel(id)`，id 必须指向一个主面板，所以官方契约里没有「动作按钮」这个位置。
 
-本插件因此自己往渲染出来的列表里插一行开关：
+本插件因此自己往侧栏顶栏（折叠按钮那一行）插一个按钮：
 
-- 复制当前面板行的 `className`（含构建哈希），所以样式和布局规则（两列/自动紧凑）对它同样生效
+- 锚点是折叠按钮自己的 `data-sidebar-toggle`：取它的父节点就是顶栏，没有类名歧义
+- 复制折叠按钮的 `iconButton` 类，去掉 `toggle` 类，尺寸与悬停效果一致
+- 顶栏是窗口拖动区（`data-window-drag`），按钮必须 `-webkit-app-region: no-drag`，否则点击会变成拖窗口
 - 点一次收起「更多」和**全部面板**，再点一次恢复
 - **品牌行与「新会话」不在范围内**：它们在面板列表上方，各自只看自己的开关
 - 它自己永远不被收起，否则就没有入口恢复
@@ -72,14 +74,14 @@ dsh plugin install https://github.com/DDDMUC/dsh-sidebar-declutter
 
 ### 锚点与自检
 
-CSS Module 的本地类名会跨包重名，所以**不能**用 `document.querySelector('[class*="_panelList"]')` 直接找列表——那可能命中另一个铺满窗口的容器（真实踩过：插入的按钮覆盖了整个界面）。
+CSS Module 的本地类名会跨包重名，所以**不能**用 `document.querySelector('[class*="_panelList"]')` 找容器——那可能命中另一个铺满窗口的容器（真实踩过：插入的按钮覆盖了整个界面）。
 
 现在的定位方式是：
 
-1. 从侧栏自己的 `[data-sidebar-toggle]` 往上找祖先
-2. 在祖先里找 `_panelList`，且必须直接包含 `> button[aria-label]`
-3. 该列表的 `getBoundingClientRect().width` 必须小于 520（侧栏是窄列）
-4. 插入后再量一次：行宽超过列表宽 +32px，或高超过 96px，就立刻移除并告警
+1. `document.querySelector('[data-sidebar-toggle]')` 拿到折叠按钮
+2. 它的 `parentElement` 就是顶栏，`getBoundingClientRect().width` 必须小于 520
+3. 插入到折叠按钮之前
+4. 插入后量一次：宽或高超过 56px 就立刻移除并告警（这个座位只容得下一个图标按钮）
 - React 重渲染会冲掉外来节点，`MutationObserver` 会把它补回去
 - 设置里可以关掉这一行（`fnRow`）
 
