@@ -102,6 +102,12 @@ window.__ModuleLoader__.load({
         ],
       },
       {
+        kind: 'panels',
+        title: '左栏面板',
+        hint: '这些是当前注册到侧栏的面板，来源是它们自己的 slot 登记——新装插件会自己出现在这里。',
+        fields: [],
+      },
+      {
         kind: 'picked',
         title: '自由隐藏',
         hint: '点「开始点选」，然后点击界面上任意一个元素，它就会被收起来。收起项列在下方，随时可以恢复。',
@@ -124,6 +130,8 @@ window.__ModuleLoader__.load({
       headerMore: false,
       /** Elements the user picked by hand: `[{ selector, label }]`. */
       picked: [],
+      /** Panel ids (from `sidebar.panellist`) the user ticked off. */
+      hiddenPanels: [],
     }
 
     /** Accepted values of the layout choice, keyed by field. */
@@ -151,6 +159,9 @@ window.__ModuleLoader__.load({
         }
         // `panelGrid` was the boolean this setting shipped as before it became a
         // three-way choice; keep an existing preference instead of resetting it.
+        if (Array.isArray(parsed?.hiddenPanels)) {
+          next.hiddenPanels = parsed.hiddenPanels.filter((one) => typeof one === 'string')
+        }
         if (Array.isArray(parsed?.picked)) {
           next.picked = parsed.picked.filter(
             (one) => one && typeof one.selector === 'string' && one.selector.trim() !== '',
@@ -273,6 +284,16 @@ window.__ModuleLoader__.load({
           'button[class*="_viewsMore"]{display:none!important}',
         )
       }
+      for (const id of values.hiddenPanels) {
+        const entry = panelEntries.find((one) => one.id === id)
+        // The DOM carries no panel id — the button's accessible name is the one
+        // hook the sidebar exposes, and it is exactly the slot label.
+        if (entry === undefined) continue
+        rules.push(
+          '[class*="_panelList"] > button[aria-label="' + cssAttrValue(entry.label) + '"]'
+            + '{display:none!important}',
+        )
+      }
       for (const one of values.picked) {
         rules.push(one.selector + '{display:none!important}')
       }
@@ -337,6 +358,19 @@ window.__ModuleLoader__.load({
     // stored list. Every pick stays restorable from the plugin page.
 
     let picker = null
+
+    /**
+     * Live view of what is registered into the sidebar's panel list, mirrored
+     * from the slot registry the sidebar itself renders from. Each entry is
+     * `{ id, order, label }`; the label is what the rendered button carries as
+     * its accessible name.
+     */
+    let panelEntries = []
+
+    /** Escape a value for a double-quoted CSS attribute selector. */
+    function cssAttrValue(value) {
+      return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+    }
 
     /** `kB3qhq_panelRow` → `panelRow`; a class without a module hash stays whole. */
     function localName(cls) {
@@ -594,6 +628,43 @@ window.__ModuleLoader__.load({
 
       const renderField = (field) => (field.type === 'choice' ? choiceFor(field) : rowFor(field))
 
+      const togglePanel = (id, on) => {
+        const next = on
+          ? values.hiddenPanels.includes(id) ? values.hiddenPanels : [...values.hiddenPanels, id]
+          : values.hiddenPanels.filter((one) => one !== id)
+        values = { ...values, hiddenPanels: next }
+        writeStore()
+        syncStyle()
+        notify()
+      }
+
+      const panelBlock = () => {
+        if (panelEntries.length === 0) {
+          return h('p', { className: 'dhns-hint' }, '当前没有检测到已注册的面板。')
+        }
+        return h(
+          'div',
+          { className: 'dhns-rows' },
+          panelEntries.map((entry) =>
+            h(
+              'label',
+              { key: entry.id, className: 'dhns-row' },
+              h('input', {
+                type: 'checkbox',
+                checked: values.hiddenPanels.includes(entry.id),
+                onChange: (event) => togglePanel(entry.id, event.target.checked === true),
+              }),
+              h(
+                'span',
+                { className: 'dhns-text' },
+                h('span', { className: 'dhns-title' }, entry.label),
+                h('span', { className: 'dhns-hint' }, entry.id),
+              ),
+            ),
+          ),
+        )
+      }
+
       const pickedBlock = () => {
         const running = picker !== null
         return [
@@ -664,6 +735,7 @@ window.__ModuleLoader__.load({
                 ? null
                 : h('span', { className: 'dhns-sectionHint' }, section.hint),
             ),
+            section.kind === 'panels' ? panelBlock() : null,
             section.kind === 'picked' ? pickedBlock() : null,
             section.fields.length === 0 ? null : h('div', { className: 'dhns-rows' }, section.fields.map(renderField)),
           ),
@@ -675,6 +747,42 @@ window.__ModuleLoader__.load({
       inject: ['slots'],
       apply(ctx) {
         values = readStore()
+
+        // Mirror the panel registry the sidebar renders from: it is the only
+        // place that knows every left-column button and its display name, so the
+        // checkboxes follow newly installed plugins without any code change.
+        const syncPanels = () => {
+          try {
+            panelEntries = ctx.slots
+              .entriesOfSlot('sidebar.panellist')
+              .map(({ options }) => ({
+                id: options.id,
+                order: options.order ?? 0,
+                label:
+                  typeof options.label === 'function'
+                    ? options.label()
+                    : options.label ?? options.id,
+              }))
+              .sort((a, b) => a.order - b.order)
+          } catch {
+            panelEntries = []
+          }
+          syncStyle()
+          notify()
+        }
+
+        ctx.effect(() => ctx.slots.subscribe('sidebar.panellist', syncPanels), 'dsh-sidebar-declutter: panel registry')
+        const locale = (() => {
+          try {
+            return ctx.get('locale')
+          } catch {
+            return null
+          }
+        })()
+        if (locale !== null && typeof locale?.subscribe === 'function') {
+          ctx.effect(() => locale.subscribe(syncPanels), 'dsh-sidebar-declutter: panel labels')
+        }
+        syncPanels()
 
         ctx.effect(() => {
           const tag = syncStyle()
