@@ -443,23 +443,37 @@ window.__ModuleLoader__.load({
     }
 
     /** Insert (or refresh) the action row inside the rendered panel list. */
+    /** Every row this attribute marks, wherever a previous module instance left it. */
+    function allFunctionRows() {
+      if (typeof document === 'undefined') return []
+      return Array.from(document.querySelectorAll('[' + FN_ROW_ATTR + ']'))
+    }
+
     function syncFunctionRow() {
       if (typeof document === 'undefined') return
       if (!values.fnRow) {
-        removeFunctionRow()
+        for (const stale of allFunctionRows()) stale.remove()
+        fnRowButton = null
         return
       }
       const nav = document.querySelector('[class*="_panelList"]')
       if (nav === null) return
-      if (fnRowButton !== null && fnRowButton.isConnected && fnRowButton.parentElement === nav) {
+
+      // A hot swap re-runs this module with fresh state while the previous
+      // instance's row is still in the page. Anything that is not exactly the one
+      // row this instance owns is stale and must go, or the list gains a copy per
+      // reload.
+      const existing = allFunctionRows()
+      const owned = existing.length === 1 && existing[0] === fnRowButton && fnRowButton.parentElement === nav
+      if (owned) {
         refreshFunctionRow()
         return
       }
+      for (const stale of existing) stale.remove()
+      fnRowButton = null
 
-      const sample = nav.querySelector(':scope > button')
+      const sample = nav.querySelector(':scope > button:not([' + FN_ROW_ATTR + '])')
       if (sample === null) return
-
-      removeFunctionRow()
       const row = document.createElement('button')
       row.type = 'button'
       row.setAttribute(FN_ROW_ATTR, '1')
