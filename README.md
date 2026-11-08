@@ -69,6 +69,17 @@ dsh plugin install https://github.com/DDDMUC/dsh-sidebar-declutter
 - **品牌行与「新会话」不在范围内**：它们在面板列表上方，各自只看自己的开关
 - 它自己永远不被收起，否则就没有入口恢复
 - 文案跟着状态走：「全部收起」↔「全部展开」
+
+### 锚点与自检
+
+CSS Module 的本地类名会跨包重名，所以**不能**用 `document.querySelector('[class*="_panelList"]')` 直接找列表——那可能命中另一个铺满窗口的容器（真实踩过：插入的按钮覆盖了整个界面）。
+
+现在的定位方式是：
+
+1. 从侧栏自己的 `[data-sidebar-toggle]` 往上找祖先
+2. 在祖先里找 `_panelList`，且必须直接包含 `> button[aria-label]`
+3. 该列表的 `getBoundingClientRect().width` 必须小于 520（侧栏是窄列）
+4. 插入后再量一次：行宽超过列表宽 +32px，或高超过 96px，就立刻移除并告警
 - React 重渲染会冲掉外来节点，`MutationObserver` 会把它补回去
 - 设置里可以关掉这一行（`fnRow`）
 

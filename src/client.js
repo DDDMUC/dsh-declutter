@@ -62,6 +62,11 @@ window.__ModuleLoader__.load({
             title: '左栏面板列表的「更多」',
             hint: '收起这一行后，面板将无法再取消固定，已固定的面板会一直列在侧栏。',
           },
+          {
+            key: 'fnRow',
+            title: '在面板列表里放一个功能按钮',
+            hint: '点一次收起「更多」和全部面板，再点一次恢复。品牌行与「新会话」不参与，它们只看自己的开关。',
+          },
         ],
       },
       {
@@ -133,6 +138,10 @@ window.__ModuleLoader__.load({
       picked: [],
       /** Panel ids (from `sidebar.panellist`) the user ticked off. */
       hiddenPanels: [],
+      /** Whether the panel list carries our own action row. */
+      fnRow: true,
+      /** Set by that row's toggle so the label never has to be inferred. */
+      allCollapsed: false,
     }
 
     /** Accepted values of the layout choice, keyed by field. */
@@ -189,7 +198,7 @@ window.__ModuleLoader__.load({
 
     function setValue(key, value) {
       if (values[key] === value) return
-      values = { ...values, [key]: value }
+      values = { ...values, [key]: value, ...(LEFT_KEYS.includes(key) ? { allCollapsed: false } : {}) }
       writeStore()
       syncStyle()
       for (const listener of [...listeners]) {
@@ -285,6 +294,12 @@ window.__ModuleLoader__.load({
           'button[class*="_viewsMore"]{display:none!important}',
         )
       }
+      if (values.allCollapsed === true) {
+        rules.push(
+          '[class*="_panelList"] > button[aria-label]:not([data-dsh-fn-row])'
+            + '{display:none!important}',
+        )
+      }
       for (const id of values.hiddenPanels) {
         const entry = panelEntries.find((one) => one.id === id)
         // The DOM carries no panel id — the button's accessible name is the one
@@ -354,16 +369,167 @@ window.__ModuleLoader__.load({
       return tag
     }
 
-    // --- stale row cleanup ------------------------------------------------------
-    // An earlier build injected an action row into the panel list. That row could
-    // end up spanning the whole window when the anchor resolved to the wrong
-    // container, so the feature is gone; any node a previous instance left behind
-    // is removed on load.
+    // --- action row -------------------------------------------------------------
+    // `sidebar.panellist` rows are navigation by contract — a click runs
+    // `selectPanel(id)` and the id must address a main panel, so an action has no
+    // seat there. This row is therefore inserted into the rendered list.
+    //
+    // The anchor matters: a bare `[class*="_panelList"]` query can match a
+    // same-named class in another package, and appending into the wrong container
+    // produced a node that covered the window. The list is now located from the
+    // sidebar's own `data-sidebar-toggle` attribute, checked by size, and the
+    // inserted row is measured afterwards — anything that reads as an overlay is
+    // removed on the spot.
 
-    function removeStaleActionRows() {
+    const FN_ROW_ATTR = 'data-dsh-fn-row'
+    let fnRowButton = null
+    let fnObserver = null
+    let fnScheduled = false
+
+    /** The panel list inside the sidebar column, or null when it is not there. */
+    function findPanelNav() {
+      if (typeof document === 'undefined') return null
+      const toggles = document.querySelectorAll('[data-sidebar-toggle]')
+      for (const toggle of toggles) {
+        let node = toggle.parentElement
+        while (node !== null && node !== document.body) {
+          const nav = node.querySelector('[class*="_panelList"]')
+          if (nav !== null && nav.querySelector(':scope > button[aria-label]') !== null) {
+            const rect = nav.getBoundingClientRect()
+            // A sidebar column is a few hundred pixels wide; a match that fills
+            // the window is a different component with a colliding local name.
+            if (rect.width > 0 && rect.width < 520) return nav
+          }
+          node = node.parentElement
+        }
+      }
+      return null
+    }
+
+    function allFunctionRows() {
+      if (typeof document === 'undefined') return []
+      return Array.from(document.querySelectorAll('[' + FN_ROW_ATTR + ']'))
+    }
+
+    function removeFunctionRow() {
+      for (const stale of allFunctionRows()) stale.remove()
+      fnRowButton = null
+    }
+
+    /** The switches this row drives: the list itself and its panels. */
+    const LEFT_KEYS = ['sidebarMore']
+
+    function toggleAllLeft() {
+      const collapse = values.allCollapsed !== true
+      values = {
+        ...values,
+        allCollapsed: collapse,
+        sidebarMore: collapse,
+        hiddenPanels: collapse ? panelEntries.map((entry) => entry.id) : [],
+      }
+      writeStore()
+      syncStyle()
+      syncFunctionRow()
+      notify()
+    }
+
+    function functionRowLabel() {
+      return values.allCollapsed === true ? '全部展开' : '全部收起'
+    }
+
+    function refreshFunctionRow() {
+      if (fnRowButton === null) return
+      fnRowButton.setAttribute('aria-pressed', values.allCollapsed === true ? 'true' : 'false')
+      fnRowButton.setAttribute('aria-label', functionRowLabel())
+      const label = fnRowButton.children[1]
+      if (label !== undefined) label.textContent = functionRowLabel()
+    }
+
+    const FN_ICON =
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+      + 'stroke-width="1.6" aria-hidden="true"><path d="M3 3l18 18"/>'
+      + '<path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/>'
+      + '<path d="M6.5 6.9C4.6 8.2 3.2 10 2.5 12c1.4 3.6 5 6 9.5 6 1.6 0 3.1-.35 4.4-1"/>'
+      + '<path d="M19.4 15.1c.9-1 1.6-2 2.1-3.1-1.4-3.6-5-6-9.5-6-.9 0-1.8.1-2.6.35"/></svg>'
+
+    function syncFunctionRow() {
       if (typeof document === 'undefined') return
-      if (typeof document.querySelectorAll !== 'function') return
-      for (const stale of document.querySelectorAll('[data-dsh-fn-row]')) stale.remove()
+      if (values.fnRow !== true) {
+        removeFunctionRow()
+        return
+      }
+      const nav = findPanelNav()
+      if (nav === null) return
+
+      const existing = allFunctionRows()
+      const owned =
+        existing.length === 1 && existing[0] === fnRowButton && fnRowButton.parentElement === nav
+      if (owned) {
+        refreshFunctionRow()
+        return
+      }
+      removeFunctionRow()
+
+      const sample = nav.querySelector(':scope > button[aria-label]')
+      if (sample === null) return
+
+      const row = document.createElement('button')
+      row.type = 'button'
+      row.setAttribute(FN_ROW_ATTR, '1')
+      row.className = sample.className
+      // Never inherit a positioning scheme from wherever the classes came from.
+      row.style.position = 'static'
+      row.setAttribute('aria-label', functionRowLabel())
+      row.setAttribute('aria-pressed', values.allCollapsed === true ? 'true' : 'false')
+
+      const glyph = document.createElement('span')
+      const sampleGlyph = sample.firstElementChild
+      if (sampleGlyph !== null) glyph.className = sampleGlyph.className
+      glyph.setAttribute('aria-hidden', 'true')
+      glyph.innerHTML = FN_ICON
+
+      const label = document.createElement('span')
+      const sampleLabel = sample.children.length > 1 ? sample.children[1] : null
+      if (sampleLabel !== null) label.className = sampleLabel.className
+      label.textContent = functionRowLabel()
+
+      row.append(glyph, label)
+      row.addEventListener('click', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        toggleAllLeft()
+      })
+      nav.appendChild(row)
+
+      // Self-check: a sane row is about as big as a panel row. Anything that
+      // reports window-sized geometry is an accident, not a row.
+      const navRect = nav.getBoundingClientRect()
+      const rowRect = row.getBoundingClientRect()
+      if (rowRect.width > navRect.width + 32 || rowRect.height > 96) {
+        row.remove()
+        console.warn('[dsh-sidebar-declutter] 功能行尺寸异常，已回退（未注入）。')
+        return
+      }
+      fnRowButton = row
+    }
+
+    function watchFunctionRow() {
+      if (typeof MutationObserver === 'undefined' || typeof document === 'undefined') return null
+      fnObserver = new MutationObserver(() => {
+        if (fnScheduled) return
+        fnScheduled = true
+        requestAnimationFrame(() => {
+          fnScheduled = false
+          syncFunctionRow()
+        })
+      })
+      fnObserver.observe(document.body, { childList: true, subtree: true })
+      syncFunctionRow()
+      return () => {
+        fnObserver?.disconnect()
+        fnObserver = null
+        removeFunctionRow()
+      }
     }
 
     // --- pick mode -------------------------------------------------------------
@@ -678,7 +844,7 @@ window.__ModuleLoader__.load({
         const next = on
           ? values.hiddenPanels.includes(id) ? values.hiddenPanels : [...values.hiddenPanels, id]
           : values.hiddenPanels.filter((one) => one !== id)
-        values = { ...values, hiddenPanels: next }
+        values = { ...values, hiddenPanels: next, allCollapsed: false }
         writeStore()
         syncStyle()
         notify()
@@ -855,14 +1021,16 @@ window.__ModuleLoader__.load({
         }, 'dsh-sidebar-declutter: stylesheet')
 
         ctx.effect(() => {
-          removeStaleActionRows()
+          const stopWatching = watchFunctionRow()
           registerTeardown(() => {
             if (picker !== null) stopPicker()
+            stopWatching?.()
           })
           return () => {
             if (picker !== null) stopPicker()
+            stopWatching?.()
           }
-        }, 'dsh-sidebar-declutter: teardown')
+        }, 'dsh-sidebar-declutter: action row')
 
         ctx.effect(() =>
           ctx.slots.inject('plugins.row.config', () =>
