@@ -65,7 +65,7 @@ window.__ModuleLoader__.load({
           {
             key: 'fnRow',
             title: '在面板列表里放一个功能按钮',
-            hint: '面板列表本身只接受入口，所以这一行由插件自己插入：点它直接进入点选隐藏模式，不用先进设置页。',
+            hint: '面板列表本身只接受入口，所以这一行由插件自己插入：点一次收起左栏所有项，再点一次全部恢复。它自己不会被收起。',
           },
         ],
       },
@@ -381,6 +381,54 @@ window.__ModuleLoader__.load({
       + '<path d="M6.5 6.9C4.6 8.2 3.2 10 2.5 12c1.4 3.6 5 6 9.5 6 1.6 0 3.1-.35 4.4-1"/>'
       + '<path d="M19.4 15.1c.9-1 1.6-2 2.1-3.1-1.4-3.6-5-6-9.5-6-.9 0-1.8.1-2.6.35"/></svg>'
 
+    /** The switches this row drives. `fnRow` stays out: hiding the control would
+     * remove the only way to bring everything back. */
+    const LEFT_KEYS = ['brand', 'newSession', 'sidebarMore']
+
+    /** Whether every left-column item is currently hidden. */
+    function leftAllHidden() {
+      const switches = LEFT_KEYS.every((key) => values[key] === true)
+      const panels = panelEntries.every((entry) => values.hiddenPanels.includes(entry.id))
+      return switches && panels
+    }
+
+    function toggleAllLeft() {
+      if (leftAllHidden()) {
+        values = {
+          ...values,
+          brand: false,
+          newSession: false,
+          sidebarMore: false,
+          hiddenPanels: [],
+        }
+      } else {
+        values = {
+          ...values,
+          brand: true,
+          newSession: true,
+          sidebarMore: true,
+          hiddenPanels: panelEntries.map((entry) => entry.id),
+        }
+      }
+      writeStore()
+      syncStyle()
+      syncFunctionRow()
+      notify()
+    }
+
+    function functionRowLabel() {
+      return leftAllHidden() ? '全部展开' : '全部收起'
+    }
+
+    /** Keep the row's text and pressed state in step with the switches. */
+    function refreshFunctionRow() {
+      if (fnRowButton === null) return
+      fnRowButton.setAttribute('aria-pressed', leftAllHidden() ? 'true' : 'false')
+      fnRowButton.setAttribute('aria-label', functionRowLabel())
+      const label = fnRowButton.children[1]
+      if (label !== undefined) label.textContent = functionRowLabel()
+    }
+
     function removeFunctionRow() {
       if (fnRowButton !== null) {
         fnRowButton.remove()
@@ -397,7 +445,10 @@ window.__ModuleLoader__.load({
       }
       const nav = document.querySelector('[class*="_panelList"]')
       if (nav === null) return
-      if (fnRowButton !== null && fnRowButton.isConnected && fnRowButton.parentElement === nav) return
+      if (fnRowButton !== null && fnRowButton.isConnected && fnRowButton.parentElement === nav) {
+        refreshFunctionRow()
+        return
+      }
 
       const sample = nav.querySelector(':scope > button')
       if (sample === null) return
@@ -409,8 +460,8 @@ window.__ModuleLoader__.load({
       // Copy the live row class names so the styling (and the grid/wrap layout
       // rules) treat it exactly like a panel row.
       row.className = sample.className
-      row.setAttribute('aria-label', '点选隐藏')
-      row.setAttribute('aria-pressed', picker === null ? 'false' : 'true')
+      row.setAttribute('aria-label', functionRowLabel())
+      row.setAttribute('aria-pressed', leftAllHidden() ? 'true' : 'false')
 
       const glyph = document.createElement('span')
       const sampleGlyph = sample.firstElementChild
@@ -424,14 +475,13 @@ window.__ModuleLoader__.load({
       const label = document.createElement('span')
       const sampleLabel = sample.children.length > 1 ? sample.children[1] : null
       if (sampleLabel !== null) label.className = sampleLabel.className
-      label.textContent = picker === null ? '点选隐藏' : '结束点选'
+      label.textContent = functionRowLabel()
 
       row.append(glyph, label)
       row.addEventListener('click', (event) => {
         event.preventDefault()
         event.stopPropagation()
-        if (picker === null) startPicker()
-        else stopPicker()
+        toggleAllLeft()
       })
 
       nav.appendChild(row)
@@ -448,11 +498,7 @@ window.__ModuleLoader__.load({
         requestAnimationFrame(() => {
           scheduled = false
           syncFunctionRow()
-          if (fnRowButton !== null) {
-            fnRowButton.setAttribute('aria-pressed', picker === null ? 'false' : 'true')
-            const label = fnRowButton.children[1]
-            if (label !== undefined) label.textContent = picker === null ? '点选隐藏' : '结束点选'
-          }
+          refreshFunctionRow()
         })
       })
       fnObserver.observe(document.body, { childList: true, subtree: true })
