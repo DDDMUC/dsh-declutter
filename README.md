@@ -58,6 +58,19 @@ dsh plugin install https://github.com/DDDMUC/dsh-sidebar-declutter
 
 值存在浏览器 `localStorage["dsh-sidebar-declutter"]`，不写 profile 配置：因此这个 bundle 不需要 Host 侧 Config schema，改一个开关也不会重启插件。代价是偏好跟着浏览器走，换浏览器或清站点数据会回到默认。
 
+## 面板列表里的功能按钮
+
+`sidebar.panellist` 的每一行都是**导航**：点击等于 `selectPanel(id)`，id 必须指向一个主面板，所以官方契约里没有「动作按钮」这个位置。
+
+本插件因此自己往渲染出来的列表里插一行「点选隐藏」：
+
+- 复制当前面板行的 `className`（含构建哈希），所以样式和布局规则（两列/自动紧凑）对它同样生效
+- 点击直接进入点选模式，再点一次结束
+- React 重渲染会冲掉外来节点，`MutationObserver` 会把它补回去
+- 设置里可以关掉这一行（`fnRow`）
+
+这是**装饰**而非契约：官方改结构时可能需要跟着调，所以它做成了可关闭的。
+
 ## 自由隐藏（点选任意元素）
 
 五个固定开关只覆盖本插件认识的那几行。要藏别的东西，用「开始点选」：

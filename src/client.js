@@ -62,6 +62,11 @@ window.__ModuleLoader__.load({
             title: '左栏面板列表的「更多」',
             hint: '收起这一行后，面板将无法再取消固定，已固定的面板会一直列在侧栏。',
           },
+          {
+            key: 'fnRow',
+            title: '在面板列表里放一个功能按钮',
+            hint: '面板列表本身只接受入口，所以这一行由插件自己插入：点它直接进入点选隐藏模式，不用先进设置页。',
+          },
         ],
       },
       {
@@ -133,6 +138,8 @@ window.__ModuleLoader__.load({
       picked: [],
       /** Panel ids (from `sidebar.panellist`) the user ticked off. */
       hiddenPanels: [],
+      /** Whether the panel list carries our own action row. */
+      fnRow: true,
     }
 
     /** Accepted values of the layout choice, keyed by field. */
@@ -192,6 +199,7 @@ window.__ModuleLoader__.load({
       values = { ...values, [key]: value }
       writeStore()
       syncStyle()
+      syncFunctionRow()
       for (const listener of [...listeners]) {
         try {
           listener()
@@ -354,6 +362,108 @@ window.__ModuleLoader__.load({
       return tag
     }
 
+    // --- function row ----------------------------------------------------------
+    // `sidebar.panellist` rows are navigation by contract — clicking one runs
+    // `selectPanel(id)`, and the id must address a main panel. There is no seat
+    // for an action in that list, so this row is inserted into the rendered nav.
+    // It copies the class names of a real panel row (including the build hash) so
+    // it inherits the exact styling, and a MutationObserver restores it if React
+    // replaces the list.
+
+    const FN_ROW_ATTR = 'data-dsh-fn-row'
+    let fnObserver = null
+    let fnRowButton = null
+
+    const FN_ICON =
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+      + 'stroke-width="1.6" aria-hidden="true"><path d="M3 3l18 18"/>'
+      + '<path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/>'
+      + '<path d="M6.5 6.9C4.6 8.2 3.2 10 2.5 12c1.4 3.6 5 6 9.5 6 1.6 0 3.1-.35 4.4-1"/>'
+      + '<path d="M19.4 15.1c.9-1 1.6-2 2.1-3.1-1.4-3.6-5-6-9.5-6-.9 0-1.8.1-2.6.35"/></svg>'
+
+    function removeFunctionRow() {
+      if (fnRowButton !== null) {
+        fnRowButton.remove()
+        fnRowButton = null
+      }
+    }
+
+    /** Insert (or refresh) the action row inside the rendered panel list. */
+    function syncFunctionRow() {
+      if (typeof document === 'undefined') return
+      if (!values.fnRow) {
+        removeFunctionRow()
+        return
+      }
+      const nav = document.querySelector('[class*="_panelList"]')
+      if (nav === null) return
+      if (fnRowButton !== null && fnRowButton.isConnected && fnRowButton.parentElement === nav) return
+
+      const sample = nav.querySelector(':scope > button')
+      if (sample === null) return
+
+      removeFunctionRow()
+      const row = document.createElement('button')
+      row.type = 'button'
+      row.setAttribute(FN_ROW_ATTR, '1')
+      // Copy the live row class names so the styling (and the grid/wrap layout
+      // rules) treat it exactly like a panel row.
+      row.className = sample.className
+      row.setAttribute('aria-label', '点选隐藏')
+      row.setAttribute('aria-pressed', picker === null ? 'false' : 'true')
+
+      const glyph = document.createElement('span')
+      const sampleGlyph = sample.firstElementChild
+      if (sampleGlyph !== null) glyph.className = sampleGlyph.className
+      glyph.setAttribute('aria-hidden', 'true')
+      glyph.style.display = 'inline-flex'
+      glyph.style.alignItems = 'center'
+      glyph.style.justifyContent = 'center'
+      glyph.innerHTML = FN_ICON
+
+      const label = document.createElement('span')
+      const sampleLabel = sample.children.length > 1 ? sample.children[1] : null
+      if (sampleLabel !== null) label.className = sampleLabel.className
+      label.textContent = picker === null ? '点选隐藏' : '结束点选'
+
+      row.append(glyph, label)
+      row.addEventListener('click', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        if (picker === null) startPicker()
+        else stopPicker()
+      })
+
+      nav.appendChild(row)
+      fnRowButton = row
+    }
+
+    /** Watch the document for the list being re-rendered and put the row back. */
+    function watchFunctionRow() {
+      if (typeof MutationObserver === 'undefined' || typeof document === 'undefined') return null
+      let scheduled = false
+      fnObserver = new MutationObserver(() => {
+        if (scheduled) return
+        scheduled = true
+        requestAnimationFrame(() => {
+          scheduled = false
+          syncFunctionRow()
+          if (fnRowButton !== null) {
+            fnRowButton.setAttribute('aria-pressed', picker === null ? 'false' : 'true')
+            const label = fnRowButton.children[1]
+            if (label !== undefined) label.textContent = picker === null ? '点选隐藏' : '结束点选'
+          }
+        })
+      })
+      fnObserver.observe(document.body, { childList: true, subtree: true })
+      syncFunctionRow()
+      return () => {
+        fnObserver?.disconnect()
+        fnObserver = null
+        removeFunctionRow()
+      }
+    }
+
     // --- pick mode -------------------------------------------------------------
     // The switches above cover the rows this bundle was written for. "Hide
     // anything" needs the user to point at the element, so this mode captures one
@@ -475,6 +585,7 @@ window.__ModuleLoader__.load({
       if (picker.outlined !== null) picker.outlined.style.outline = picker.savedOutline
       picker.bar.remove()
       picker = null
+      syncFunctionRow()
       notify()
     }
 
@@ -557,6 +668,7 @@ window.__ModuleLoader__.load({
       document.addEventListener('mousemove', state.onMove, true)
       document.addEventListener('click', state.onClick, true)
       picker = state
+      syncFunctionRow()
       notify()
     }
 
@@ -810,6 +922,8 @@ window.__ModuleLoader__.load({
             if (tag !== null) tag.remove()
           }
         }, 'dsh-sidebar-declutter: stylesheet')
+
+        ctx.effect(() => watchFunctionRow(), 'dsh-sidebar-declutter: function row')
 
         ctx.effect(() =>
           ctx.slots.inject('plugins.row.config', () =>
