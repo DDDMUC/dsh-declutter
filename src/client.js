@@ -205,7 +205,13 @@ window.__ModuleLoader__.load({
 
     function setValue(key, value) {
       if (values[key] === value) return
-      values = { ...values, [key]: value }
+      // Turning the button off while the list is collapsed would remove the only
+      // way back, so that switch expands first.
+      if (key === 'fnRow' && value === false && values.collapsedAll === true) {
+        values = { ...values, [key]: value, collapsedAll: false }
+      } else {
+        values = { ...values, [key]: value }
+      }
       writeStore()
       syncStyle()
       for (const listener of [...listeners]) {
@@ -560,7 +566,17 @@ window.__ModuleLoader__.load({
         event.stopPropagation()
         toggleCollapse()
       })
-      strip.insertBefore(row, toggle)
+      try {
+        strip.insertBefore(row, toggle)
+      } catch {
+        // The toggle may not be a direct child of the strip after a layout
+        // change; appending still keeps the button inside the same row.
+        try {
+          strip.appendChild(row)
+        } catch {
+          return
+        }
+      }
 
       // Self-check: this seat holds one 28px icon button. Anything that reports
       // more than that is not a button, and is undone immediately.
@@ -578,11 +594,13 @@ window.__ModuleLoader__.load({
       fnObserver = new MutationObserver(() => {
         if (fnScheduled) return
         fnScheduled = true
-        requestAnimationFrame(() => {
+        // setTimeout, not requestAnimationFrame: a background tab pauses rAF, and
+        // a row removed while the window is hidden would never come back.
+        setTimeout(() => {
           fnScheduled = false
           stampPanelRows()
           syncFunctionRow()
-        })
+        }, 0)
       })
       fnObserver.observe(document.body, { childList: true, subtree: true })
       stampPanelRows()
@@ -1082,6 +1100,24 @@ window.__ModuleLoader__.load({
             if (tag !== null) tag.remove()
           }
         }, 'dsh-sidebar-declutter: stylesheet')
+
+        // Dead-man switch: the collapse layer is only reachable through a button
+        // that lives in a React-owned row. If that button is ever missing while
+        // the list is collapsed, expand instead of trapping the user.
+        ctx.effect(() => {
+          const timer = setInterval(() => {
+            if (values.collapsedAll !== true) return
+            if (document.querySelector('[' + FN_ROW_ATTR + ']') !== null) return
+            syncFunctionRow()
+            if (document.querySelector('[' + FN_ROW_ATTR + ']') !== null) return
+            values = { ...values, collapsedAll: false }
+            writeStore()
+            syncStyle()
+            notify()
+            console.warn('[dsh-sidebar-declutter] 展开按钮缺失，已自动展开面板以免锁死。')
+          }, 3000)
+          return () => clearInterval(timer)
+        }, 'dsh-sidebar-declutter: dead-man switch')
 
         ctx.effect(() => {
           const stopWatching = watchFunctionRow()
