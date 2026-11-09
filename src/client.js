@@ -216,6 +216,17 @@ window.__ModuleLoader__.load({
       }
     }
 
+    /**
+     * Whether the sidebar's own collapse toggle renders on screen at all. A shell
+     * that owns the collapse control hides this one, and the row above it then
+     * costs full height while offering nothing to click.
+     */
+    function sidebarToggleRenders() {
+      if (typeof document === 'undefined') return false
+      const node = document.querySelector('[class*="_logoRow"] [data-sidebar-toggle]')
+      return node !== null && node.getClientRects().length > 0
+    }
+
     function hiddenRules() {
       const rules = []
       if (values.brand) {
@@ -233,6 +244,13 @@ window.__ModuleLoader__.load({
           '[data-shell-toggle] [class*="_logoRow"]{display:none!important}',
           '[class*="_logoRow"]:has([data-sidebar-toggle]) [class*="_brand"]{display:none!important}',
         )
+        // Fallback for shells that hide the in-row toggle without opting in via
+        // `data-shell-toggle`: probe what actually rendered and drop the row when
+        // the button is not on screen. `getClientRects()` is empty only for
+        // `display:none` (or an unrendered node), which is the case this covers.
+        if (!sidebarToggleRenders()) {
+          rules.push('[class*="_logoRow"]{display:none!important}')
+        }
       }
       if (values.newSession) {
         rules.push('button[class*="_newSession"]{display:none!important}')
@@ -1061,6 +1079,12 @@ window.__ModuleLoader__.load({
         ctx.effect(() => {
           const tag = syncStyle()
 
+          // The probe reads the rendered box, so it has to run once the shell's
+          // own stylesheet has landed and the sidebar has mounted; the first pass
+          // may legitimately see nothing.
+          const resync = setTimeout(() => syncStyle(), 400)
+          const resyncLate = setTimeout(() => syncStyle(), 2000)
+
           // Diagnose selector drift after an upgrade instead of failing silently:
           // the sidebar is on screen but nothing matches the button.
           let timer = null
@@ -1076,6 +1100,8 @@ window.__ModuleLoader__.load({
           }
 
           return () => {
+            clearTimeout(resync)
+            clearTimeout(resyncLate)
             if (timer !== null) clearTimeout(timer)
             if (tag !== null) tag.remove()
           }
