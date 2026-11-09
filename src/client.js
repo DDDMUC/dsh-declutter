@@ -302,13 +302,19 @@ window.__ModuleLoader__.load({
       }
       for (const id of values.hiddenPanels) {
         const entry = panelEntries.find((one) => one.id === id)
-        // The DOM carries no panel id — the button's accessible name is the one
-        // hook the sidebar exposes, and it is exactly the slot label.
         if (entry === undefined) continue
-        rules.push(
-          '[class*="_panelList"] > button[aria-label="' + cssAttrValue(entry.label) + '"]'
-            + '{display:none!important}',
-        )
+        // Primary: the id stamped on the row by `stampPanelRows`. It survives two
+        // panels sharing a label.
+        rules.push('button[data-dsh-panel="' + cssAttrValue(id) + '"]{display:none!important}')
+        // Fallback for the first paint, before stamping has run: the label is
+        // safe to use only when no other panel carries it.
+        const shared = panelEntries.some((one) => one.id !== id && one.label === entry.label)
+        if (!shared) {
+          rules.push(
+            '[class*="_panelList"] > button[aria-label="' + cssAttrValue(entry.label) + '"]'
+              + '{display:none!important}',
+          )
+        }
       }
       for (const one of values.picked) {
         rules.push(one.selector + '{display:none!important}')
@@ -386,6 +392,23 @@ window.__ModuleLoader__.load({
     let fnObserver = null
     let fnScheduled = false
 
+    /** The panel list inside the sidebar column, located from the same anchor. */
+    function findPanelNav() {
+      if (typeof document === 'undefined') return null
+      const toggle = document.querySelector('[data-sidebar-toggle]')
+      if (toggle === null) return null
+      let node = toggle.parentElement
+      while (node !== null && node !== document.body) {
+        const nav = node.querySelector('[class*="_panelList"]')
+        if (nav !== null) {
+          const rect = nav.getBoundingClientRect()
+          if (rect.width > 0 && rect.width < 520) return nav
+        }
+        node = node.parentElement
+      }
+      return null
+    }
+
     /**
      * The top strip: the row holding the sidebar's collapse toggle. Its own
      * `data-sidebar-toggle` attribute is the anchor, so `parentElement` is the
@@ -401,6 +424,38 @@ window.__ModuleLoader__.load({
       // A sidebar strip; anything wider is a different layout entirely.
       if (rect.width === 0 || rect.width > 520) return null
       return { strip, toggle }
+    }
+
+    /**
+     * Stamp each rendered panel row with the registration id it belongs to, so a
+     * hide rule can name the panel instead of its (possibly shared) label. Rows
+     * are matched by label first; when several panels share one, the buttons and
+     * the entries are paired in render order. A failed pass hides nothing, which
+     * is the safe direction: the user still sees every panel and can re-tick it.
+     */
+    function stampPanelRows() {
+      const nav = findPanelNav()
+      if (nav === null) return
+      const buttons = Array.from(nav.querySelectorAll(':scope > button[aria-label]'))
+        .filter((one) => !one.hasAttribute(FN_ROW_ATTR))
+      if (buttons.length === 0) return
+
+      const claimed = new Set()
+      const take = (label) => {
+        const hit = panelEntries.find((entry) => entry.label === label && !claimed.has(entry.id))
+        if (hit === undefined) return null
+        claimed.add(hit.id)
+        return hit.id
+      }
+      for (const button of buttons) {
+        const label = button.getAttribute('aria-label') ?? ''
+        const id = take(label)
+        if (id === null) {
+          button.removeAttribute('data-dsh-panel')
+          continue
+        }
+        if (button.getAttribute('data-dsh-panel') !== id) button.setAttribute('data-dsh-panel', id)
+      }
     }
 
     function allFunctionRows() {
@@ -518,10 +573,12 @@ window.__ModuleLoader__.load({
         fnScheduled = true
         requestAnimationFrame(() => {
           fnScheduled = false
+          stampPanelRows()
           syncFunctionRow()
         })
       })
       fnObserver.observe(document.body, { childList: true, subtree: true })
+      stampPanelRows()
       syncFunctionRow()
       return () => {
         fnObserver?.disconnect()
@@ -996,6 +1053,7 @@ window.__ModuleLoader__.load({
         syncPanels()
 
         ctx.effect(() => {
+          stampPanelRows()
           const tag = syncStyle()
 
           // Diagnose selector drift after an upgrade instead of failing silently:
