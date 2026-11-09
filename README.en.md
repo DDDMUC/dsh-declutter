@@ -51,6 +51,7 @@ Selectors key on CSS-module **local suffixes** (`_newSession`), never on the bui
 ## Caveats
 
 - The brand row carries the sidebar collapse toggle on Windows and Linux. The rule hides the whole row only where it has no `[data-sidebar-toggle]`, and otherwise hides just the brand, so the toggle always survives.
+- A shell that keeps the collapse control in its own chrome should mark its frame with `data-shell-toggle`. The row's toggle is then either hidden by that shell or a duplicate of the one above it, so the plugin drops the whole row and returns its height to the panel list — the same end state macOS already has.
 - Preferences are stored in `localStorage`. Its scope is the page origin, which includes the port; if the app picks a new port on restart, the switches fall back to these defaults.
 - Hiding the sidebar's More also retires pin/unpin: that menu is the only place a panel can be pinned or unpinned.
 

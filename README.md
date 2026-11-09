@@ -164,10 +164,21 @@ button[data-dsh-panel="fishpond"]{display:none!important}
 
 ```css
 [class*="_logoRow"]:not(:has([data-sidebar-toggle])) { display: none !important }
+[data-shell-toggle] [class*="_logoRow"] { display: none !important }
 [class*="_logoRow"]:has([data-sidebar-toggle]) [class*="_brand"] { display: none !important }
 ```
 
 macOS 桌面端品牌行只有装饰用的 span（折叠按钮在上方那条 `topStrip` 里），所以整行隐藏；其它平台保留行、只隐藏品牌本身。`data-sidebar-toggle` 是侧栏自己的属性，比 CSS Module 类名稳定。
+
+### `data-shell-toggle`：外壳自带折叠入口时
+
+有些客户端把折叠按钮放进窗口顶栏，并把侧栏里那个藏起来——那一行于是既看不到、也点不到，60px 却还占着。这类外壳应该在**帧元素**上打一个 `data-shell-toggle`（值随意，存在即可）：
+
+```html
+<div class="…_frame" data-shell-toggle="sidebar">
+```
+
+本插件看到这个属性就把整行 `display:none`，高度直接还给面板列表，与 macOS 的终态一致。没有这个属性的外壳行为不变。
 
 ## 藏了什么
 

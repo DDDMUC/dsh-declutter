@@ -226,6 +226,11 @@ window.__ModuleLoader__.load({
         // sidebar's own attribute, stabler than any CSS-module class name.
         rules.push(
           '[class*="_logoRow"]:not(:has([data-sidebar-toggle])){display:none!important}',
+          // A shell that owns the collapse control marks its frame with
+          // `data-shell-toggle`. The button in this row is then either hidden by
+          // the shell or a duplicate of the one it renders above, so nothing here
+          // has to survive: drop the whole row and hand its height to the list.
+          '[data-shell-toggle] [class*="_logoRow"]{display:none!important}',
           '[class*="_logoRow"]:has([data-sidebar-toggle]) [class*="_brand"]{display:none!important}',
         )
       }
