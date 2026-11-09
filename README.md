@@ -174,8 +174,9 @@ button[data-dsh-panel="fishpond"]{display:none!important}
 
 macOS 桌面端品牌行只有装饰用的 span（折叠按钮在上方那条 `topStrip` 里），所以整行隐藏。其它平台那一行里确实装着折叠按钮，藏掉就再也展不开侧栏，于是改成**只交还高度、不交还按钮**：
 
-- 行高和内边距压成 0，`overflow: visible` 让按钮按原位置画出来；
-- 按钮 `z-index: 2`，叠在下面的面板列表之上，点击行为不变；
+- 行高和内边距压成 0，`overflow: visible` 让按钮画在外面；
+- **web 端**没有窗口标题栏，按钮放到侧栏右缘外的边沟里（`left: calc(var(--dsh-sidebar-width) + 8px)`，跟随侧栏拖宽；`position: fixed` 也让它不受侧栏列 `overflow: hidden` 裁剪）；
+- **Windows 桌面端**的按钮由外壳固定在标题栏（`[data-windows-titlebar] .toggle { position: fixed; left: 12px }`），本条选择器特异性更高，所以用 `html:not([data-windows-titlebar])` 把它排除在外，桌面端该按钮仍在标题栏原位；
 - 侧栏折叠成窄条时恢复 28px 行高，否则收起来就展不开了。
 
 全程纯 CSS：**没有 JS、没有定时器、没有强制布局**，也不依赖外壳配合。`data-sidebar-toggle` 是侧栏自己的属性，比 CSS Module 类名稳定。

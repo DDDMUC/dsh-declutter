@@ -234,8 +234,14 @@ window.__ModuleLoader__.load({
           '[class*="_root"]:not([class*="_collapsed"]) [class*="_logoRow"]:has([data-sidebar-toggle])'
             + '{height:0!important;min-height:0!important;padding:0!important;overflow:visible!important'
             + ';align-items:flex-start!important;justify-content:flex-end!important}',
-          '[class*="_root"]:not([class*="_collapsed"]) [class*="_logoRow"]:has([data-sidebar-toggle]) [class*="_toggle"]'
-            + '{z-index:2}',
+          // Web only: a shell that draws a Windows title bar already pins this
+          // button up there (`[data-windows-titlebar] .toggle{position:fixed;
+          // left:12px}`), and this selector is more specific, so it has to stay
+          // out of that layout entirely. In the browser there is no title bar,
+          // and the button belongs in the gutter just right of the sidebar.
+          'html:not([data-windows-titlebar]) [class*="_root"]:not([class*="_collapsed"])'
+            + ' [class*="_logoRow"]:has([data-sidebar-toggle]) [class*="_toggle"]'
+            + '{position:fixed;top:6px;left:calc(var(--dsh-sidebar-width,280px) + 8px);z-index:30;border-radius:8px}',
           // The collapsed rail keeps a normal row, or there is no way back out.
           '[class*="_root"][class*="_collapsed"] [class*="_logoRow"]'
             + '{height:28px!important;min-height:0!important;padding-block:0!important;align-items:center!important}',
