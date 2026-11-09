@@ -292,13 +292,17 @@ window.__ModuleLoader__.load({
       for (const id of values.hiddenPanels) {
         const entry = panelEntries.find((one) => one.id === id)
         if (entry === undefined) continue
-        // The list exposes no per-row id in the DOM; the accessible name is the
-        // only hook. Two panels sharing a name hide together — accepted, because
-        // the alternative was an injected attribute that could disappear.
-        rules.push(
-          '[class*="_panelList"] > button[aria-label="' + cssAttrValue(entry.label) + '"]'
-            + '{display:none!important}',
-        )
+        // Primary: the id stamped on the row, which keeps two same-named panels
+        // apart. Fallback: the name, used only before the first stamping pass and
+        // only when no other panel carries it.
+        rules.push('button[' + PANEL_ATTR + '="' + cssAttrValue(id) + '"]{display:none!important}')
+        const shared = panelEntries.some((one) => one.id !== id && one.label === entry.label)
+        if (!shared) {
+          rules.push(
+            '[class*="_panelList"] > button[aria-label="' + cssAttrValue(entry.label) + '"]'
+              + '{display:none!important}',
+          )
+        }
       }
       return rules
     }
@@ -411,6 +415,83 @@ window.__ModuleLoader__.load({
         h('span', { className: 'dhns-footer-icon', 'aria-hidden': 'true' }, values.collapsedAll ? '▸' : '▾'),
         wide ? h('span', { className: 'dhns-footer-label' }, label) : null,
       )
+    }
+
+    // --- per-row id stamping -----------------------------------------------------
+    // The list exposes no id in the DOM, only the accessible name, so two panels
+    // sharing a name would hide together. Each rendered row is therefore stamped
+    // with the registration id it belongs to, and the hide rule names the id.
+    // Stamping only sets attributes; it never inserts or moves a node.
+
+    const PANEL_ATTR = 'data-dsh-panel'
+
+    /** The panel list inside the sidebar column, located from its own anchor. */
+    function findPanelNav() {
+      if (typeof document === 'undefined') return null
+      const toggle = document.querySelector('[data-sidebar-toggle]')
+      if (toggle === null) return null
+      let node = toggle.parentElement
+      while (node !== null && node !== document.body) {
+        const nav = node.querySelector('[class*="_panelList"]')
+        if (nav !== null) {
+          const rect = nav.getBoundingClientRect()
+          // A sidebar column is a narrow strip; anything wider is another
+          // component whose CSS-module local name happens to match.
+          if (rect.width > 0 && rect.width < 520) return nav
+        }
+        node = node.parentElement
+      }
+      return null
+    }
+
+    /**
+     * Pair each rendered row with a registered entry: by name first, then by
+     * render order among the rest. A failed pass hides nothing, which is the safe
+     * direction — every panel stays visible and can be re-ticked.
+     */
+    function stampPanelRows() {
+      try {
+        const nav = findPanelNav()
+        if (nav === null) return
+        const rows = Array.from(nav.querySelectorAll(':scope > button[aria-label]'))
+        if (rows.length === 0) return
+        const claimed = new Set()
+        const take = (label) => {
+          const hit = panelEntries.find((entry) => entry.label === label && !claimed.has(entry.id))
+          if (hit === undefined) return null
+          claimed.add(hit.id)
+          return hit.id
+        }
+        for (const row of rows) {
+          const id = take(row.getAttribute('aria-label') ?? '')
+          if (id === null) {
+            row.removeAttribute(PANEL_ATTR)
+            continue
+          }
+          if (row.getAttribute(PANEL_ATTR) !== id) row.setAttribute(PANEL_ATTR, id)
+        }
+      } catch (error) {
+        console.warn('[dsh-sidebar-declutter] 面板打标失败：', error)
+      }
+    }
+
+    /** Re-stamp whenever the sidebar re-renders its list. */
+    function watchPanelRows() {
+      if (typeof MutationObserver === 'undefined' || typeof document === 'undefined') return null
+      let scheduled = false
+      const observer = new MutationObserver(() => {
+        if (scheduled) return
+        scheduled = true
+        // setTimeout rather than requestAnimationFrame: a hidden tab pauses rAF,
+        // and rows re-rendered there would never be re-stamped.
+        setTimeout(() => {
+          scheduled = false
+          stampPanelRows()
+        }, 0)
+      })
+      observer.observe(document.body, { childList: true, subtree: true })
+      stampPanelRows()
+      return () => observer.disconnect()
     }
 
     function notify() {
@@ -578,6 +659,7 @@ window.__ModuleLoader__.load({
           } catch {
             panelEntries = []
           }
+          stampPanelRows()
           syncStyle()
           notify()
         }
@@ -594,6 +676,7 @@ window.__ModuleLoader__.load({
           ctx.effect(() => locale.subscribe(syncPanels), 'dsh-sidebar-declutter: panel labels')
         }
         syncPanels()
+        ctx.effect(() => watchPanelRows(), 'dsh-sidebar-declutter: panel rows')
 
         ctx.effect(() => {
           const tag = syncStyle()

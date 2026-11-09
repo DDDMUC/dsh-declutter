@@ -69,6 +69,18 @@ dsh plugin install https://github.com/DDDMUC/dsh-sidebar-declutter
 - 折叠状态不持久化，刷新后一定是展开
 - 窄栏（rail）时缩成图标
 
+## 按 id 隐藏面板
+
+侧栏每一行渲染后会被打上 `data-dsh-panel="<注册 id>"`，隐藏规则优先用它：
+
+```css
+button[data-dsh-panel="fishpond"]{display:none!important}
+```
+
+名字只在**唯一**时作为首帧兜底（那时属性还没打上）。因此两个插件面板取同名也不会互相牵连。
+
+打标只写属性，不插入、不移动任何节点；打标失败的方向是安全的——什么都不会被隐藏。
+
 ## 排布：三选一
 
 `panelLayout` 是单选值，不是三个独立开关——同时启用两套布局规则会互相覆盖，所以设计成一个 `<fieldset>` + 共享 `name` 的 radio 组，浏览器层面就保证只能选一个。
