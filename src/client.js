@@ -475,23 +475,52 @@ window.__ModuleLoader__.load({
       }
     }
 
-    /** Re-stamp whenever the sidebar re-renders its list. */
+    /**
+     * Re-stamp whenever the sidebar re-renders its list. The observer watches the
+     * list node only — watching the whole document would fire on every chat
+     * token. Until the sidebar exists, a short poll looks for it and then stops.
+     */
     function watchPanelRows() {
       if (typeof MutationObserver === 'undefined' || typeof document === 'undefined') return null
+      let observer = null
+      let target = null
       let scheduled = false
-      const observer = new MutationObserver(() => {
+      let poll = null
+
+      const stampSoon = () => {
         if (scheduled) return
         scheduled = true
-        // setTimeout rather than requestAnimationFrame: a hidden tab pauses rAF,
-        // and rows re-rendered there would never be re-stamped.
         setTimeout(() => {
           scheduled = false
           stampPanelRows()
-        }, 0)
-      })
-      observer.observe(document.body, { childList: true, subtree: true })
-      stampPanelRows()
-      return () => observer.disconnect()
+        }, 16)
+      }
+
+      const attach = () => {
+        const nav = findPanelNav()
+        if (nav === null) return false
+        if (nav === target) return true
+        observer?.disconnect()
+        target = nav
+        observer = new MutationObserver(stampSoon)
+        observer.observe(nav, { childList: true })
+        stampPanelRows()
+        return true
+      }
+
+      if (!attach()) {
+        poll = setInterval(() => {
+          if (attach() && poll !== null) {
+            clearInterval(poll)
+            poll = null
+          }
+        }, 500)
+      }
+
+      return () => {
+        observer?.disconnect()
+        if (poll !== null) clearInterval(poll)
+      }
     }
 
     function notify() {
