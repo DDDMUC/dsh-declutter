@@ -1,6 +1,6 @@
 {
   "name": "dsh-sidebar-declutter",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "DSH 侧栏整理：隐藏冗余行、按 id 收起任意面板、面板列表排布三选一、点选元素加入勾选列表。纯样式注入，卸载即还原。",
   "type": "module",
   "main": "src/index.js",
