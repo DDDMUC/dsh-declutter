@@ -140,8 +140,12 @@ window.__ModuleLoader__.load({
       hiddenPanels: [],
       /** Whether the panel list carries our own action row. */
       fnRow: true,
-      /** Set by that row's toggle so the label never has to be inferred. */
-      allCollapsed: false,
+      /**
+       * The bulk layer the eye button drives. It is deliberately separate from
+       * `hiddenPanels`: collapsing and expanding must never touch what the user
+       * ticked by hand, and the checkboxes never show this layer.
+       */
+      collapsedAll: false,
     }
 
     /** Accepted values of the layout choice, keyed by field. */
@@ -169,6 +173,9 @@ window.__ModuleLoader__.load({
         }
         // `panelGrid` was the boolean this setting shipped as before it became a
         // three-way choice; keep an existing preference instead of resetting it.
+        if (parsed?.collapsedAll === undefined && parsed?.allCollapsed === true) {
+          next.collapsedAll = true
+        }
         if (Array.isArray(parsed?.hiddenPanels)) {
           next.hiddenPanels = parsed.hiddenPanels.filter((one) => typeof one === 'string')
         }
@@ -198,7 +205,7 @@ window.__ModuleLoader__.load({
 
     function setValue(key, value) {
       if (values[key] === value) return
-      values = { ...values, [key]: value, ...(LEFT_KEYS.includes(key) ? { allCollapsed: false } : {}) }
+      values = { ...values, [key]: value }
       writeStore()
       syncStyle()
       for (const listener of [...listeners]) {
@@ -294,10 +301,15 @@ window.__ModuleLoader__.load({
           'button[class*="_viewsMore"]{display:none!important}',
         )
       }
-      if (values.allCollapsed === true) {
+      if (values.collapsedAll === true) {
+        // The bulk layer, and only this layer: every panel row plus the list's
+        // own More launcher. The individual switches and the checkbox list are
+        // untouched, so expanding later restores exactly what was there.
         rules.push(
           '[class*="_panelList"] > button[aria-label]:not([data-dsh-fn-row])'
             + '{display:none!important}',
+          '[class*="_panelList"] [class*="_moreAnchor"]{display:none!important}',
+          '[class*="_panelList"] button[aria-haspopup="menu"]{display:none!important}',
         )
       }
       for (const id of values.hiddenPanels) {
@@ -468,17 +480,12 @@ window.__ModuleLoader__.load({
       fnRowButton = null
     }
 
-    /** The switches this row drives: the list itself and its panels. */
-    const LEFT_KEYS = ['sidebarMore']
-
-    function toggleAllLeft() {
-      const collapse = values.allCollapsed !== true
-      values = {
-        ...values,
-        allCollapsed: collapse,
-        sidebarMore: collapse,
-        hiddenPanels: collapse ? panelEntries.map((entry) => entry.id) : [],
-      }
+    /**
+     * Collapse or expand the list. This writes one boolean and nothing else —
+     * the manual set stays exactly as the user left it.
+     */
+    function toggleCollapse() {
+      values = { ...values, collapsedAll: values.collapsedAll !== true }
       writeStore()
       syncStyle()
       syncFunctionRow()
@@ -486,13 +493,13 @@ window.__ModuleLoader__.load({
     }
 
     function functionRowLabel() {
-      return values.allCollapsed === true ? '全部展开' : '全部收起'
+      return values.collapsedAll === true ? '全部展开' : '全部收起'
     }
 
     function refreshFunctionRow() {
       if (fnRowButton === null) return
       const label = functionRowLabel()
-      fnRowButton.setAttribute('aria-pressed', values.allCollapsed === true ? 'true' : 'false')
+      fnRowButton.setAttribute('aria-pressed', values.collapsedAll === true ? 'true' : 'false')
       fnRowButton.setAttribute('aria-label', label)
       fnRowButton.setAttribute('title', label)
     }
@@ -534,7 +541,7 @@ window.__ModuleLoader__.load({
         .join(' ')
       if (buttonClass !== '') row.className = buttonClass
       row.setAttribute('aria-label', functionRowLabel())
-      row.setAttribute('aria-pressed', values.allCollapsed === true ? 'true' : 'false')
+      row.setAttribute('aria-pressed', values.collapsedAll === true ? 'true' : 'false')
       row.setAttribute('title', functionRowLabel())
       // The strip is a window-drag region; without this the click starts a drag.
       row.style.webkitAppRegion = 'no-drag'
@@ -551,7 +558,7 @@ window.__ModuleLoader__.load({
       row.addEventListener('click', (event) => {
         event.preventDefault()
         event.stopPropagation()
-        toggleAllLeft()
+        toggleCollapse()
       })
       strip.insertBefore(row, toggle)
 
@@ -899,7 +906,7 @@ window.__ModuleLoader__.load({
         const next = on
           ? values.hiddenPanels.includes(id) ? values.hiddenPanels : [...values.hiddenPanels, id]
           : values.hiddenPanels.filter((one) => one !== id)
-        values = { ...values, hiddenPanels: next, allCollapsed: false }
+        values = { ...values, hiddenPanels: next }
         writeStore()
         syncStyle()
         notify()
