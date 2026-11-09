@@ -226,12 +226,19 @@ window.__ModuleLoader__.load({
         // sidebar's own attribute, stabler than any CSS-module class name.
         rules.push(
           '[class*="_logoRow"]:not(:has([data-sidebar-toggle])){display:none!important}',
-          // A shell that owns the collapse control marks its frame with
-          // `data-shell-toggle`. The button in this row is then either hidden by
-          // the shell or a duplicate of the one it renders above, so nothing here
-          // has to survive: drop the whole row and hand its height to the list.
-          '[data-shell-toggle] [class*="_logoRow"]{display:none!important}',
           '[class*="_logoRow"]:has([data-sidebar-toggle]) [class*="_brand"]{display:none!important}',
+          // Where the row does hold the toggle, drop its height instead of the
+          // row: zero height, no padding, and the button keeps the same place,
+          // drawn on top of whatever now starts where the row used to be. Pure
+          // CSS — no probe, no timer, no forced layout.
+          '[class*="_root"]:not([class*="_collapsed"]) [class*="_logoRow"]:has([data-sidebar-toggle])'
+            + '{height:0!important;min-height:0!important;padding:0!important;overflow:visible!important'
+            + ';align-items:flex-start!important;justify-content:flex-end!important}',
+          '[class*="_root"]:not([class*="_collapsed"]) [class*="_logoRow"]:has([data-sidebar-toggle]) [class*="_toggle"]'
+            + '{z-index:2}',
+          // The collapsed rail keeps a normal row, or there is no way back out.
+          '[class*="_root"][class*="_collapsed"] [class*="_logoRow"]'
+            + '{height:28px!important;min-height:0!important;padding-block:0!important;align-items:center!important}',
         )
       }
       if (values.newSession) {

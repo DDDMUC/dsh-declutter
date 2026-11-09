@@ -164,21 +164,21 @@ button[data-dsh-panel="fishpond"]{display:none!important}
 
 ```css
 [class*="_logoRow"]:not(:has([data-sidebar-toggle])) { display: none !important }
-[data-shell-toggle] [class*="_logoRow"] { display: none !important }
 [class*="_logoRow"]:has([data-sidebar-toggle]) [class*="_brand"] { display: none !important }
+[class*="_root"]:not([class*="_collapsed"]) [class*="_logoRow"]:has([data-sidebar-toggle]) {
+  height: 0 !important; min-height: 0 !important; padding: 0 !important;
+  overflow: visible !important; align-items: flex-start !important;
+  justify-content: flex-end !important;
+}
 ```
 
-macOS 桌面端品牌行只有装饰用的 span（折叠按钮在上方那条 `topStrip` 里），所以整行隐藏；其它平台保留行、只隐藏品牌本身。`data-sidebar-toggle` 是侧栏自己的属性，比 CSS Module 类名稳定。
+macOS 桌面端品牌行只有装饰用的 span（折叠按钮在上方那条 `topStrip` 里），所以整行隐藏。其它平台那一行里确实装着折叠按钮，藏掉就再也展不开侧栏，于是改成**只交还高度、不交还按钮**：
 
-### `data-shell-toggle`：外壳自带折叠入口时
+- 行高和内边距压成 0，`overflow: visible` 让按钮按原位置画出来；
+- 按钮 `z-index: 2`，叠在下面的面板列表之上，点击行为不变；
+- 侧栏折叠成窄条时恢复 28px 行高，否则收起来就展不开了。
 
-有些客户端把折叠按钮放进窗口顶栏，并把侧栏里那个藏起来——那一行于是既看不到、也点不到，60px 却还占着。这类外壳应该在**帧元素**上打一个 `data-shell-toggle`（值随意，存在即可）：
-
-```html
-<div class="…_frame" data-shell-toggle="sidebar">
-```
-
-本插件看到这个属性就把整行 `display:none`，高度直接还给面板列表，与 macOS 的终态一致。没有这个属性的外壳行为不变。
+全程纯 CSS：**没有 JS、没有定时器、没有强制布局**，也不依赖外壳配合。`data-sidebar-toggle` 是侧栏自己的属性，比 CSS Module 类名稳定。
 
 ## 藏了什么
 
