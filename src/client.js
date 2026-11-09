@@ -62,11 +62,6 @@ window.__ModuleLoader__.load({
             title: '左栏面板列表的「更多」',
             hint: '收起这一行后，面板将无法再取消固定，已固定的面板会一直列在侧栏。',
           },
-          {
-            key: 'fnRow',
-            title: '在面板列表里放一个功能按钮',
-            hint: '点一次收起「更多」和全部面板，再点一次恢复。品牌行与「新会话」不参与，它们只看自己的开关。',
-          },
         ],
       },
       {
@@ -138,8 +133,6 @@ window.__ModuleLoader__.load({
       picked: [],
       /** Panel ids (from `sidebar.panellist`) the user ticked off. */
       hiddenPanels: [],
-      /** Whether the panel list carries our own action row. */
-      fnRow: true,
       /**
        * The bulk layer the eye button drives. It is deliberately separate from
        * `hiddenPanels`: collapsing and expanding must never touch what the user
@@ -205,13 +198,7 @@ window.__ModuleLoader__.load({
 
     function setValue(key, value) {
       if (values[key] === value) return
-      // Turning the button off while the list is collapsed would remove the only
-      // way back, so that switch expands first.
-      if (key === 'fnRow' && value === false && values.collapsedAll === true) {
-        values = { ...values, [key]: value, collapsedAll: false }
-      } else {
-        values = { ...values, [key]: value }
-      }
+      values = { ...values, [key]: value }
       writeStore()
       syncStyle()
       for (const listener of [...listeners]) {
@@ -321,18 +308,13 @@ window.__ModuleLoader__.load({
       for (const id of values.hiddenPanels) {
         const entry = panelEntries.find((one) => one.id === id)
         if (entry === undefined) continue
-        // Primary: the id stamped on the row by `stampPanelRows`. It survives two
-        // panels sharing a label.
-        rules.push('button[data-dsh-panel="' + cssAttrValue(id) + '"]{display:none!important}')
-        // Fallback for the first paint, before stamping has run: the label is
-        // safe to use only when no other panel carries it.
-        const shared = panelEntries.some((one) => one.id !== id && one.label === entry.label)
-        if (!shared) {
-          rules.push(
-            '[class*="_panelList"] > button[aria-label="' + cssAttrValue(entry.label) + '"]'
-              + '{display:none!important}',
-          )
-        }
+        // The list exposes no per-row id in the DOM; the accessible name is the
+        // only hook. Two panels sharing a name hide together — accepted, because
+        // the alternative was an injected attribute that could disappear.
+        rules.push(
+          '[class*="_panelList"] > button[aria-label="' + cssAttrValue(entry.label) + '"]'
+            + '{display:none!important}',
+        )
       }
       for (const one of values.picked) {
         rules.push(one.selector + '{display:none!important}')
@@ -368,7 +350,13 @@ window.__ModuleLoader__.load({
       '.dhns-btn:hover{background:var(--dsw-alias-interactive-bg-hover)}',
       '.dhns-btn[data-tone=primary]{background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-primary,#fff);',
       'border-color:var(--dsw-alias-label-primary)}',
-      '.dhns-status{font-size:11px;line-height:1.4;color:var(--dsw-alias-state-business-primary,#2c7be5)}',
+      '.dhns-footer-btn{display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;',
+      'padding:7px 8px;margin:0 0 2px;border:0;border-radius:var(--dsw-radius-md,8px);',
+      'background:transparent;color:var(--dsw-alias-label-primary);font:inherit;text-align:left;cursor:pointer}',
+      '.dhns-footer-btn:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+      '.dhns-footer-btn[data-rail=true]{justify-content:center;width:36px;height:36px;padding:0;margin:0 auto 2px}',
+      '.dhns-footer-icon{flex:none;width:14px;text-align:center;opacity:.75}',
+      '.dhns-footer-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.dhns-subhead{font-size:12px;font-weight:500;letter-spacing:.02em;',
       'color:var(--dsw-alias-label-secondary);margin-top:4px}',
       '.dhns-picked{display:flex;flex-direction:column;gap:6px;margin-top:4px}',
@@ -394,231 +382,49 @@ window.__ModuleLoader__.load({
       return tag
     }
 
-    // --- action row -------------------------------------------------------------
-    // `sidebar.panellist` rows are navigation by contract — a click runs
-    // `selectPanel(id)` and the id must address a main panel, so an action has no
-    // seat there. This row is therefore inserted into the rendered list.
-    //
-    // The anchor matters: a bare `[class*="_panelList"]` query can match a
-    // same-named class in another package, and appending into the wrong container
-    // produced a node that covered the window. The list is now located from the
-    // sidebar's own `data-sidebar-toggle` attribute, checked by size, and the
-    // inserted row is measured afterwards — anything that reads as an overlay is
-    // removed on the spot.
+    // --- collapse control -------------------------------------------------------
+    // The panel list is navigation by contract: a row runs `selectPanel(id)`, so a
+    // plugin cannot put an action there. The official action seats are
+    // `sidebar.panellist.actions` (a row inside the list's More menu) and
+    // `sidebar.footer.action`. Both are rendered by the sidebar from the registry,
+    // so nothing here can be removed by a re-render — no DOM injection at all.
 
-    const FN_ROW_ATTR = 'data-dsh-fn-row'
-    let fnRowButton = null
-    let fnObserver = null
-    let fnScheduled = false
+    let panelEntries = []
 
-    /** The panel list inside the sidebar column, located from the same anchor. */
-    function findPanelNav() {
-      if (typeof document === 'undefined') return null
-      const toggle = document.querySelector('[data-sidebar-toggle]')
-      if (toggle === null) return null
-      let node = toggle.parentElement
-      while (node !== null && node !== document.body) {
-        const nav = node.querySelector('[class*="_panelList"]')
-        if (nav !== null) {
-          const rect = nav.getBoundingClientRect()
-          if (rect.width > 0 && rect.width < 520) return nav
-        }
-        node = node.parentElement
-      }
-      return null
-    }
-
-    /**
-     * The top strip: the row holding the sidebar's collapse toggle. Its own
-     * `data-sidebar-toggle` attribute is the anchor, so `parentElement` is the
-     * strip itself — no class-suffix guessing, and nothing else can match.
-     */
-    function findTopStrip() {
-      if (typeof document === 'undefined') return null
-      const toggle = document.querySelector('[data-sidebar-toggle]')
-      if (toggle === null) return null
-      const strip = toggle.parentElement
-      if (strip === null || strip === document.body) return null
-      const rect = strip.getBoundingClientRect()
-      // A sidebar strip; anything wider is a different layout entirely.
-      if (rect.width === 0 || rect.width > 520) return null
-      return { strip, toggle }
-    }
-
-    /**
-     * Stamp each rendered panel row with the registration id it belongs to, so a
-     * hide rule can name the panel instead of its (possibly shared) label. Rows
-     * are matched by label first; when several panels share one, the buttons and
-     * the entries are paired in render order. A failed pass hides nothing, which
-     * is the safe direction: the user still sees every panel and can re-tick it.
-     */
-    function stampPanelRows() {
-      const nav = findPanelNav()
-      if (nav === null) return
-      const buttons = Array.from(nav.querySelectorAll(':scope > button[aria-label]'))
-        .filter((one) => !one.hasAttribute(FN_ROW_ATTR))
-      if (buttons.length === 0) return
-
-      const claimed = new Set()
-      const take = (label) => {
-        const hit = panelEntries.find((entry) => entry.label === label && !claimed.has(entry.id))
-        if (hit === undefined) return null
-        claimed.add(hit.id)
-        return hit.id
-      }
-      for (const button of buttons) {
-        const label = button.getAttribute('aria-label') ?? ''
-        const id = take(label)
-        if (id === null) {
-          button.removeAttribute('data-dsh-panel')
-          continue
-        }
-        if (button.getAttribute('data-dsh-panel') !== id) button.setAttribute('data-dsh-panel', id)
-      }
-    }
-
-    function allFunctionRows() {
-      if (typeof document === 'undefined') return []
-      return Array.from(document.querySelectorAll('[' + FN_ROW_ATTR + ']'))
-    }
-
-    function removeFunctionRow() {
-      for (const stale of allFunctionRows()) stale.remove()
-      fnRowButton = null
-    }
-
-    /**
-     * Collapse or expand the list. This writes one boolean and nothing else —
-     * the manual set stays exactly as the user left it.
-     */
     function toggleCollapse() {
       values = { ...values, collapsedAll: values.collapsedAll !== true }
       writeStore()
       syncStyle()
-      syncFunctionRow()
       notify()
     }
 
-    function functionRowLabel() {
-      return values.collapsedAll === true ? '全部展开' : '全部收起'
+    function collapseLabel() {
+      return values.collapsedAll === true ? '展开面板列表' : '收起面板列表'
     }
 
-    function refreshFunctionRow() {
-      if (fnRowButton === null) return
-      const label = functionRowLabel()
-      fnRowButton.setAttribute('aria-pressed', values.collapsedAll === true ? 'true' : 'false')
-      fnRowButton.setAttribute('aria-label', label)
-      fnRowButton.setAttribute('title', label)
-    }
-
-    const FN_ICON =
-      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-      + 'stroke-width="1.6" aria-hidden="true"><path d="M3 3l18 18"/>'
-      + '<path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/>'
-      + '<path d="M6.5 6.9C4.6 8.2 3.2 10 2.5 12c1.4 3.6 5 6 9.5 6 1.6 0 3.1-.35 4.4-1"/>'
-      + '<path d="M19.4 15.1c.9-1 1.6-2 2.1-3.1-1.4-3.6-5-6-9.5-6-.9 0-1.8.1-2.6.35"/></svg>'
-
-    function syncFunctionRow() {
-      try {
-        syncFunctionRowInner()
-      } catch (error) {
-        console.warn('[dsh-sidebar-declutter] 功能按钮同步失败：', error)
-      }
-    }
-
-    function syncFunctionRowInner() {
-      if (typeof document === 'undefined') return
-      if (values.fnRow !== true) {
-        removeFunctionRow()
-        return
-      }
-      const found = findTopStrip()
-      if (found === null) return
-      const { strip, toggle } = found
-
-      const existing = allFunctionRows()
-      const owned =
-        existing.length === 1 && existing[0] === fnRowButton && fnRowButton.parentElement === strip
-      if (owned) {
-        refreshFunctionRow()
-        return
-      }
-      removeFunctionRow()
-
-      const row = document.createElement('button')
-      row.type = 'button'
-      row.setAttribute(FN_ROW_ATTR, '1')
-      // Reuse the toggle's own button class so geometry and hover match, minus
-      // the toggle-specific one.
-      const buttonClass = String(toggle.className)
-        .split(/\s+/)
-        .filter((one) => one !== '' && !/_toggle\b/.test(one))
-        .join(' ')
-      if (buttonClass !== '') row.className = buttonClass
-      row.setAttribute('aria-label', functionRowLabel())
-      row.setAttribute('aria-pressed', values.collapsedAll === true ? 'true' : 'false')
-      row.setAttribute('title', functionRowLabel())
-      // The strip is a window-drag region; without this the click starts a drag.
-      row.style.webkitAppRegion = 'no-drag'
-      row.style.display = 'inline-flex'
-      row.style.alignItems = 'center'
-      row.style.justifyContent = 'center'
-      row.style.background = 'none'
-      row.style.border = 'none'
-      row.style.padding = '0'
-      row.style.cursor = 'pointer'
-      row.style.color = 'inherit'
-      row.innerHTML = FN_ICON
-
-      row.addEventListener('click', (event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        toggleCollapse()
-      })
-      try {
-        strip.insertBefore(row, toggle)
-      } catch {
-        // The toggle may not be a direct child of the strip after a layout
-        // change; appending still keeps the button inside the same row.
-        try {
-          strip.appendChild(row)
-        } catch {
-          return
-        }
-      }
-
-      // Self-check: this seat holds one 28px icon button. Anything that reports
-      // more than that is not a button, and is undone immediately.
-      const rowRect = row.getBoundingClientRect()
-      if (rowRect.width > 56 || rowRect.height > 56) {
-        row.remove()
-        console.warn('[dsh-sidebar-declutter] 功能按钮尺寸异常，已回退（未注入）。')
-        return
-      }
-      fnRowButton = row
-    }
-
-    function watchFunctionRow() {
-      if (typeof MutationObserver === 'undefined' || typeof document === 'undefined') return null
-      fnObserver = new MutationObserver(() => {
-        if (fnScheduled) return
-        fnScheduled = true
-        // setTimeout, not requestAnimationFrame: a background tab pauses rAF, and
-        // a row removed while the window is hidden would never come back.
-        setTimeout(() => {
-          fnScheduled = false
-          stampPanelRows()
-          syncFunctionRow()
-        }, 0)
-      })
-      fnObserver.observe(document.body, { childList: true, subtree: true })
-      stampPanelRows()
-      syncFunctionRow()
-      return () => {
-        fnObserver?.disconnect()
-        fnObserver = null
-        removeFunctionRow()
-      }
+    /**
+     * The footer action: an official list slot the sidebar renders itself, so it
+     * cannot be removed by a re-render. `wide` collapses it to an icon in the rail.
+     */
+    function CollapseAction(props) {
+      const [, force] = React.useReducer((count) => count + 1, 0)
+      React.useEffect(() => subscribe(force), [])
+      const wide = props?.wide !== false
+      const label = collapseLabel()
+      return h(
+        'button',
+        {
+          type: 'button',
+          className: 'dhns-footer-btn',
+          'data-rail': wide ? undefined : 'true',
+          'aria-label': label,
+          'aria-pressed': values.collapsedAll === true ? 'true' : 'false',
+          title: label,
+          onClick: () => toggleCollapse(),
+        },
+        h('span', { className: 'dhns-footer-icon', 'aria-hidden': 'true' }, values.collapsedAll ? '▸' : '▾'),
+        wide ? h('span', { className: 'dhns-footer-label' }, label) : null,
+      )
     }
 
     // --- pick mode -------------------------------------------------------------
@@ -656,8 +462,6 @@ window.__ModuleLoader__.load({
      * `{ id, order, label }`; the label is what the rendered button carries as
      * its accessible name.
      */
-    let panelEntries = []
-
     /** Escape a value for a double-quoted CSS attribute selector. */
     function cssAttrValue(value) {
       return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
@@ -876,16 +680,6 @@ window.__ModuleLoader__.load({
         return h('span', null, on.length === 0 ? '未隐藏任何项' : '已隐藏：' + on.join('、'))
       }
 
-      /** Where the action button stands right now, readable without DevTools. */
-      const actionRowStatus = () => {
-        if (values.fnRow !== true) return '已关闭'
-        if (typeof document === 'undefined') return '页面未就绪'
-        const found = allFunctionRows().length
-        if (found > 0) return '已插入'
-        const strip = typeof findTopStrip === 'function' ? findTopStrip() : null
-        return strip === null ? '找不到侧栏顶栏（折叠按钮不存在）' : '找到顶栏，但插入失败'
-      }
-
       const rowFor = (field) =>
         h(
           'label',
@@ -900,9 +694,6 @@ window.__ModuleLoader__.load({
             { className: 'dhns-text' },
             h('span', { className: 'dhns-title' }, field.title),
             h('span', { className: 'dhns-hint' }, field.hint),
-            field.key === 'fnRow'
-              ? h('span', { className: 'dhns-status' }, '状态：' + actionRowStatus())
-              : null,
           ),
         )
 
@@ -1063,17 +854,6 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         values = readStore()
 
-        // Started first: if anything later throws, the button still gets a chance
-        // to appear and the console carries the reason.
-        ctx.effect(() => {
-          try {
-            return watchFunctionRow()
-          } catch (error) {
-            console.warn('[dsh-sidebar-declutter] 功能按钮安装失败：', error)
-            return undefined
-          }
-        }, 'dsh-sidebar-declutter: action row')
-
         // Mirror the panel registry the sidebar renders from: it is the only
         // place that knows every left-column button and its display name, so the
         // checkboxes follow newly installed plugins without any code change.
@@ -1111,11 +891,6 @@ window.__ModuleLoader__.load({
         syncPanels()
 
         ctx.effect(() => {
-          try {
-            stampPanelRows()
-          } catch (error) {
-            console.warn('[dsh-sidebar-declutter] 面板打标失败：', error)
-          }
           const tag = syncStyle()
 
           // Diagnose selector drift after an upgrade instead of failing silently:
@@ -1138,24 +913,15 @@ window.__ModuleLoader__.load({
           }
         }, 'dsh-sidebar-declutter: stylesheet')
 
-        // Dead-man switch: the collapse layer is only reachable through a button
-        // that lives in a React-owned row. If that button is ever missing while
-        // the list is collapsed, expand instead of trapping the user.
-        ctx.effect(() => {
-          const timer = setInterval(() => {
-            if (values.collapsedAll !== true) return
-            if (document.querySelector('[' + FN_ROW_ATTR + ']') !== null) return
-            syncFunctionRow()
-            if (document.querySelector('[' + FN_ROW_ATTR + ']') !== null) return
-            values = { ...values, collapsedAll: false }
-            writeStore()
-            syncStyle()
-            notify()
-            console.warn('[dsh-sidebar-declutter] 展开按钮缺失，已自动展开面板以免锁死。')
-          }, 3000)
-          return () => clearInterval(timer)
-        }, 'dsh-sidebar-declutter: dead-man switch')
 
+        ctx.effect(() =>
+          ctx.slots.inject('sidebar.footer.action', () =>
+            ctx.slots.register(
+              { name: 'sidebar.footer.action', id: 'sidebar-declutter-collapse', order: 10 },
+              CollapseAction,
+            ),
+          ),
+        )
 
         ctx.effect(() =>
           ctx.slots.inject('plugins.row.config', () =>
