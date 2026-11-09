@@ -173,9 +173,9 @@ window.__ModuleLoader__.load({
         }
         // `panelGrid` was the boolean this setting shipped as before it became a
         // three-way choice; keep an existing preference instead of resetting it.
-        if (parsed?.collapsedAll === undefined && parsed?.allCollapsed === true) {
-          next.collapsedAll = true
-        }
+        // Deliberately not restored: a collapsed list plus a missing expand
+        // control is a lockout, and a lockout that survives a restart is
+        // unacceptable. Collapse lasts for the session only.
         if (Array.isArray(parsed?.hiddenPanels)) {
           next.hiddenPanels = parsed.hiddenPanels.filter((one) => typeof one === 'string')
         }
@@ -368,6 +368,7 @@ window.__ModuleLoader__.load({
       '.dhns-btn:hover{background:var(--dsw-alias-interactive-bg-hover)}',
       '.dhns-btn[data-tone=primary]{background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-primary,#fff);',
       'border-color:var(--dsw-alias-label-primary)}',
+      '.dhns-status{font-size:11px;line-height:1.4;color:var(--dsw-alias-state-business-primary,#2c7be5)}',
       '.dhns-subhead{font-size:12px;font-weight:500;letter-spacing:.02em;',
       'color:var(--dsw-alias-label-secondary);margin-top:4px}',
       '.dhns-picked{display:flex;flex-direction:column;gap:6px;margin-top:4px}',
@@ -518,6 +519,14 @@ window.__ModuleLoader__.load({
       + '<path d="M19.4 15.1c.9-1 1.6-2 2.1-3.1-1.4-3.6-5-6-9.5-6-.9 0-1.8.1-2.6.35"/></svg>'
 
     function syncFunctionRow() {
+      try {
+        syncFunctionRowInner()
+      } catch (error) {
+        console.warn('[dsh-sidebar-declutter] 功能按钮同步失败：', error)
+      }
+    }
+
+    function syncFunctionRowInner() {
       if (typeof document === 'undefined') return
       if (values.fnRow !== true) {
         removeFunctionRow()
@@ -867,6 +876,16 @@ window.__ModuleLoader__.load({
         return h('span', null, on.length === 0 ? '未隐藏任何项' : '已隐藏：' + on.join('、'))
       }
 
+      /** Where the action button stands right now, readable without DevTools. */
+      const actionRowStatus = () => {
+        if (values.fnRow !== true) return '已关闭'
+        if (typeof document === 'undefined') return '页面未就绪'
+        const found = allFunctionRows().length
+        if (found > 0) return '已插入'
+        const strip = typeof findTopStrip === 'function' ? findTopStrip() : null
+        return strip === null ? '找不到侧栏顶栏（折叠按钮不存在）' : '找到顶栏，但插入失败'
+      }
+
       const rowFor = (field) =>
         h(
           'label',
@@ -881,6 +900,9 @@ window.__ModuleLoader__.load({
             { className: 'dhns-text' },
             h('span', { className: 'dhns-title' }, field.title),
             h('span', { className: 'dhns-hint' }, field.hint),
+            field.key === 'fnRow'
+              ? h('span', { className: 'dhns-status' }, '状态：' + actionRowStatus())
+              : null,
           ),
         )
 
@@ -1041,6 +1063,17 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         values = readStore()
 
+        // Started first: if anything later throws, the button still gets a chance
+        // to appear and the console carries the reason.
+        ctx.effect(() => {
+          try {
+            return watchFunctionRow()
+          } catch (error) {
+            console.warn('[dsh-sidebar-declutter] 功能按钮安装失败：', error)
+            return undefined
+          }
+        }, 'dsh-sidebar-declutter: action row')
+
         // Mirror the panel registry the sidebar renders from: it is the only
         // place that knows every left-column button and its display name, so the
         // checkboxes follow newly installed plugins without any code change.
@@ -1078,7 +1111,11 @@ window.__ModuleLoader__.load({
         syncPanels()
 
         ctx.effect(() => {
-          stampPanelRows()
+          try {
+            stampPanelRows()
+          } catch (error) {
+            console.warn('[dsh-sidebar-declutter] 面板打标失败：', error)
+          }
           const tag = syncStyle()
 
           // Diagnose selector drift after an upgrade instead of failing silently:
@@ -1119,17 +1156,6 @@ window.__ModuleLoader__.load({
           return () => clearInterval(timer)
         }, 'dsh-sidebar-declutter: dead-man switch')
 
-        ctx.effect(() => {
-          const stopWatching = watchFunctionRow()
-          registerTeardown(() => {
-            if (picker !== null) stopPicker()
-            stopWatching?.()
-          })
-          return () => {
-            if (picker !== null) stopPicker()
-            stopWatching?.()
-          }
-        }, 'dsh-sidebar-declutter: action row')
 
         ctx.effect(() =>
           ctx.slots.inject('plugins.row.config', () =>
