@@ -28,7 +28,7 @@ dsh plugin install https://github.com/DDDMUC/dsh-sidebar-declutter
 
 注册在 `plugins.row.config`，key 是 `<包名>#<patch 行 id>` = `dsh-sidebar-declutter#sidebar-declutter`。打开路径：**插件 → 已安装 → dsh-sidebar-declutter → 该 bundle 下面那行的配置箭头**。行摘要会直接显示「已隐藏：…」。
 
-六个开关分两组，改动立即生效，不重启插件、不重载页面：
+开关分两组，改动立即生效，不重启插件、不重载页面：
 
 **左栏**
 
@@ -52,47 +52,13 @@ dsh plugin install https://github.com/DDDMUC/dsh-sidebar-declutter
 |---|---|---|
 | `panelLayout` | `two` | 面板列表排布：`stack` / `two` / `wrap` 三选一 |
 
+> 点选隐藏（自由隐藏）与「收起 / 展开面板列表」两个功能已移除，代码备份在 `backup/`，Git 标签 `archive/pick-and-collapse`。
+
 行摘要只汇总「隐藏」组，不会把排布选项算成「已隐藏」。
 
 旧版本存的是布尔值 `panelGrid`：`true` 迁移为 `two`（该键最初就是「一行两个」的意思），`false` 迁移为 `stack`。存储值非法时回落到默认。
 
 值存在浏览器 `localStorage["dsh-sidebar-declutter"]`，不写 profile 配置：因此这个 bundle 不需要 Host 侧 Config schema，改一个开关也不会重启插件。代价是偏好跟着浏览器走，换浏览器或清站点数据会回到默认。
-
-## 收起 / 展开面板列表
-
-`sidebar.panellist` 的每一行都是导航（点击即 `selectPanel(id)`，id 必须指向主面板），所以动作按钮没有位置可注册。
-
-本插件改为使用**官方动作位** `sidebar.footer.action`：侧栏底部、设置按钮上方。它由侧栏从注册表渲染，**不会被 React 重渲染移除**——这一点和早先的 DOM 注入方案有本质区别（注入的节点会被冲掉，曾导致按钮消失、面板收着打不开）。
-
-- 宽栏时显示「收起面板列表 / 展开面板列表」，窄栏（rail）时缩成图标
-- 它驱动独立的一层 `collapsedAll`，不改变你手工勾选的面板
-- 折叠状态不持久化：刷新或重启后一定是展开的
-
-## 自由隐藏（点选任意元素）
-
-五个固定开关只覆盖本插件认识的那几行。要藏别的东西，用「开始点选」：
-
-1. 在插件页点 **开始点选隐藏**
-2. 鼠标划过界面，元素会被描边（蓝色=可藏，红色=受保护）
-3. 点击即可收起，底部浮条上有 **撤销** 和 **完成**
-
-收起项会列在「自由隐藏」下面，每项都能单独 **恢复**，也能 **全部恢复**。
-
-### 选择器怎么生成
-
-按优先级取最稳的一种：
-
-1. `id`
-2. 标签 + 普通类名（如 `button.dsd-trigger`）
-3. 标签 + CSS Module 本地名后缀（如 `button[class*="_newSession"]`）——不用哈希前缀，构建后仍然有效
-4. 元素的 `data-*` 属性
-5. 退化为 `:nth-child` 路径（最不稳，仅在前几种都不适用时使用）
-
-### 安全护栏
-
-- **设置入口受保护**：任何包含或等于设置触发行的元素都拒绝隐藏，否则会锁死通往本页的唯一入口（红框提示）
-- 插件页自己的控件不参与点选，点上去照常工作
-- 每次收起都可立即撤销，且持久化后仍可在列表里逐项恢复
 
 ## 排布：三选一
 

@@ -29,6 +29,12 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const h = React.createElement
 
+    /**
+     * Bisect switch: the settings card is the only thing this bundle contributes
+     * to the plugins page, so it can be taken out while that page is investigated.
+     */
+    const ENABLE_ROW_CONFIG = true
+
     /** Row-config key: `<bundle package>#<row id from the bundle patch>`. */
     const ROW_CONFIG_KEY = 'dsh-sidebar-declutter#sidebar-declutter'
     const STORE_KEY = 'dsh-sidebar-declutter'
@@ -108,12 +114,6 @@ window.__ModuleLoader__.load({
           },
         ],
       },
-      {
-        kind: 'picked',
-        title: '自由隐藏',
-        hint: '点「开始点选」，然后点击界面上任意一个元素，它就会被收起来。收起项列在下方，随时可以恢复。',
-        fields: [],
-      },
     ]
 
     /** Flat view of every switch, in page order, tagged with its section. */
@@ -129,16 +129,8 @@ window.__ModuleLoader__.load({
       sidebarMore: true,
       rightMore: true,
       headerMore: false,
-      /** Elements the user picked by hand: `[{ selector, label }]`. */
-      picked: [],
       /** Panel ids (from `sidebar.panellist`) the user ticked off. */
       hiddenPanels: [],
-      /**
-       * The bulk layer the eye button drives. It is deliberately separate from
-       * `hiddenPanels`: collapsing and expanding must never touch what the user
-       * ticked by hand, and the checkboxes never show this layer.
-       */
-      collapsedAll: false,
     }
 
     /** Accepted values of the layout choice, keyed by field. */
@@ -166,16 +158,8 @@ window.__ModuleLoader__.load({
         }
         // `panelGrid` was the boolean this setting shipped as before it became a
         // three-way choice; keep an existing preference instead of resetting it.
-        // Deliberately not restored: a collapsed list plus a missing expand
-        // control is a lockout, and a lockout that survives a restart is
-        // unacceptable. Collapse lasts for the session only.
         if (Array.isArray(parsed?.hiddenPanels)) {
           next.hiddenPanels = parsed.hiddenPanels.filter((one) => typeof one === 'string')
-        }
-        if (Array.isArray(parsed?.picked)) {
-          next.picked = parsed.picked.filter(
-            (one) => one && typeof one.selector === 'string' && one.selector.trim() !== '',
-          )
         }
         if (parsed?.panelLayout === undefined && typeof parsed?.panelGrid === 'boolean') {
           // `panelGrid` was introduced meaning "two per row" before it briefly
@@ -294,17 +278,6 @@ window.__ModuleLoader__.load({
           'button[class*="_viewsMore"]{display:none!important}',
         )
       }
-      if (values.collapsedAll === true) {
-        // The bulk layer, and only this layer: every panel row plus the list's
-        // own More launcher. The individual switches and the checkbox list are
-        // untouched, so expanding later restores exactly what was there.
-        rules.push(
-          '[class*="_panelList"] > button[aria-label]:not([data-dsh-fn-row])'
-            + '{display:none!important}',
-          '[class*="_panelList"] [class*="_moreAnchor"]{display:none!important}',
-          '[class*="_panelList"] button[aria-haspopup="menu"]{display:none!important}',
-        )
-      }
       for (const id of values.hiddenPanels) {
         const entry = panelEntries.find((one) => one.id === id)
         if (entry === undefined) continue
@@ -315,9 +288,6 @@ window.__ModuleLoader__.load({
           '[class*="_panelList"] > button[aria-label="' + cssAttrValue(entry.label) + '"]'
             + '{display:none!important}',
         )
-      }
-      for (const one of values.picked) {
-        rules.push(one.selector + '{display:none!important}')
       }
       return rules
     }
@@ -359,12 +329,6 @@ window.__ModuleLoader__.load({
       '.dhns-footer-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.dhns-subhead{font-size:12px;font-weight:500;letter-spacing:.02em;',
       'color:var(--dsw-alias-label-secondary);margin-top:4px}',
-      '.dhns-picked{display:flex;flex-direction:column;gap:6px;margin-top:4px}',
-      '.dhns-pickedRow{display:flex;align-items:center;gap:10px;padding:6px 10px;',
-      'border-radius:var(--dsw-radius-md,8px);border:1px solid var(--dsw-alias-border-secondary,rgba(128,128,128,.18))}',
-      '.dhns-pickedRow .dhns-hint{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.dhns-sel{font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;',
-      'color:var(--dsw-alias-label-secondary);max-width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     ].join('')
 
     function syncStyle() {
@@ -382,172 +346,12 @@ window.__ModuleLoader__.load({
       return tag
     }
 
-    // --- collapse control -------------------------------------------------------
-    // The panel list is navigation by contract: a row runs `selectPanel(id)`, so a
-    // plugin cannot put an action there. The official action seats are
-    // `sidebar.panellist.actions` (a row inside the list's More menu) and
-    // `sidebar.footer.action`. Both are rendered by the sidebar from the registry,
-    // so nothing here can be removed by a re-render — no DOM injection at all.
-
+    /** Live view of what is registered into the sidebar's panel list. */
     let panelEntries = []
 
-    function toggleCollapse() {
-      values = { ...values, collapsedAll: values.collapsedAll !== true }
-      writeStore()
-      syncStyle()
-      notify()
-    }
-
-    function collapseLabel() {
-      return values.collapsedAll === true ? '展开面板列表' : '收起面板列表'
-    }
-
-    /**
-     * The footer action: an official list slot the sidebar renders itself, so it
-     * cannot be removed by a re-render. `wide` collapses it to an icon in the rail.
-     */
-    function CollapseAction(props) {
-      const [, force] = React.useReducer((count) => count + 1, 0)
-      React.useEffect(() => subscribe(force), [])
-      const wide = props?.wide !== false
-      const label = collapseLabel()
-      return h(
-        'button',
-        {
-          type: 'button',
-          className: 'dhns-footer-btn',
-          'data-rail': wide ? undefined : 'true',
-          'aria-label': label,
-          'aria-pressed': values.collapsedAll === true ? 'true' : 'false',
-          title: label,
-          onClick: () => toggleCollapse(),
-        },
-        h('span', { className: 'dhns-footer-icon', 'aria-hidden': 'true' }, values.collapsedAll ? '▸' : '▾'),
-        wide ? h('span', { className: 'dhns-footer-label' }, label) : null,
-      )
-    }
-
-    // --- pick mode -------------------------------------------------------------
-    // The switches above cover the rows this bundle was written for. "Hide
-    // anything" needs the user to point at the element, so this mode captures one
-    // click at a time, turns the target into a selector, and appends it to the
-    // stored list. Every pick stays restorable from the plugin page.
-
-    let picker = null
-
-    /**
-     * Teardown handles that outlive one module instance. A hot swap re-runs this
-     * module with fresh state while the previous instance's document listeners
-     * are still attached; without this the old capture handler keeps swallowing
-     * every click in the page.
-     */
-    const TEARDOWN_KEY = '__dshSidebarDeclutterTeardown'
-
-    function registerTeardown(fn) {
-      if (typeof window === 'undefined') return
-      const previous = window[TEARDOWN_KEY]
-      if (typeof previous === 'function') {
-        try {
-          previous()
-        } catch {
-          // A broken previous instance must not stop this one.
-        }
-      }
-      window[TEARDOWN_KEY] = fn
-    }
-
-    /**
-     * Live view of what is registered into the sidebar's panel list, mirrored
-     * from the slot registry the sidebar itself renders from. Each entry is
-     * `{ id, order, label }`; the label is what the rendered button carries as
-     * its accessible name.
-     */
     /** Escape a value for a double-quoted CSS attribute selector. */
     function cssAttrValue(value) {
       return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-    }
-
-    /** `kB3qhq_panelRow` → `panelRow`; a class without a module hash stays whole. */
-    function localName(cls) {
-      const match = /^[A-Za-z0-9_-]+_([A-Za-z][A-Za-z0-9-]*)$/.exec(cls)
-      return match === null ? null : match[1]
-    }
-
-    function escapeIdent(value) {
-      return typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
-        ? CSS.escape(value)
-        : value.replace(/[^A-Za-z0-9_-]/g, (ch) => '\\' + ch)
-    }
-
-    /**
-     * A selector that survives the next build. CSS-module class names carry a
-     * per-build hash (`kB3qhq_panelRow`), so they are matched by their local
-     * suffix; an id or a `data-` attribute is preferred when the element has one.
-     */
-    function buildSelector(el) {
-      if (el.id !== '') return '#' + escapeIdent(el.id)
-      const classes = Array.from(el.classList)
-      const locals = classes.map(localName).filter((one) => one !== null)
-      const plain = classes.filter((one) => localName(one) === null)
-      if (plain.length > 0 || locals.length > 0) {
-        let sel = el.tagName.toLowerCase()
-        if (plain.length > 0) sel += '.' + escapeIdent(plain[0])
-        if (locals.length > 0) sel += '[class*="_' + locals[0] + '"]'
-        return sel
-      }
-      for (const attr of Array.from(el.attributes)) {
-        if (attr.name.startsWith('data-') && attr.name !== 'data-dsh-sidebar-declutter') {
-          return '[' + attr.name + ']'
-        }
-      }
-      const path = []
-      let node = el
-      for (let depth = 0; depth < 5 && node && node !== document.body; depth += 1) {
-        let sel = node.tagName.toLowerCase()
-        const parent = node.parentElement
-        if (parent !== null) sel += ':nth-child(' + (Array.from(parent.children).indexOf(node) + 1) + ')'
-        path.unshift(sel)
-        node = node.parentElement
-      }
-      return path.join(' > ')
-    }
-
-    function labelFor(el) {
-      const named = el.getAttribute('aria-label') ?? el.getAttribute('title') ?? ''
-      const text = (named !== '' ? named : el.textContent ?? '').replace(/\s+/g, ' ').trim()
-      return text === '' ? el.tagName.toLowerCase() : text.slice(0, 24)
-    }
-
-    /** Guards that keep the way back open. */
-    function isProtected(el) {
-      if (typeof document === 'undefined') return true
-      if (el === document.body || el === document.documentElement) return true
-      if (el.closest('.dhns-form') !== null) return true
-      // The settings entry is the only door to the plugin page that holds the
-      // restore list; hiding it — directly or through an ancestor — locks the
-      // user out of the very screen that could undo it.
-      if (el.matches('[class*="_triggerRow"]') || el.querySelector('[class*="_triggerRow"]') !== null) return true
-      return false
-    }
-
-    function addPicked(el) {
-      const selector = buildSelector(el)
-      if (selector.trim() === '') return null
-      if (values.picked.some((one) => one.selector === selector)) return { selector, duplicate: true }
-      const entry = { selector, label: labelFor(el) }
-      values = { ...values, picked: [...values.picked, entry] }
-      writeStore()
-      syncStyle()
-      notify()
-      return { selector, duplicate: false }
-    }
-
-    function removePickedAt(index) {
-      const next = values.picked.filter((_, position) => position !== index)
-      values = { ...values, picked: next }
-      writeStore()
-      syncStyle()
-      notify()
     }
 
     function notify() {
@@ -558,108 +362,6 @@ window.__ModuleLoader__.load({
           // One broken subscriber must not stop the rest.
         }
       }
-    }
-
-    function stopPicker() {
-      if (picker === null) return
-      document.removeEventListener('click', picker.onClick, true)
-      document.removeEventListener('mousemove', picker.onMove, true)
-      document.removeEventListener('keydown', picker.onKeyDown, true)
-      if (picker.outlined !== null) picker.outlined.style.outline = picker.savedOutline
-      picker.bar.remove()
-      picker = null
-      notify()
-    }
-
-    function startPicker() {
-      if (typeof document === 'undefined' || picker !== null) return
-      const bar = document.createElement('div')
-      bar.setAttribute('data-dsh-picker', '1')
-      bar.style.cssText = [
-        'position:fixed', 'left:50%', 'bottom:24px', 'transform:translateX(-50%)',
-        'z-index:2147483000', 'display:flex', 'align-items:center', 'gap:10px',
-        'padding:8px 12px', 'border-radius:12px', 'font:13px/1.4 system-ui,sans-serif',
-        'background:#1f2328', 'color:#fff', 'box-shadow:0 8px 24px rgba(0,0,0,.35)',
-      ].join(';')
-
-      const text = document.createElement('span')
-      text.setAttribute('data-role', 'text')
-      const undo = document.createElement('button')
-      undo.type = 'button'
-      undo.textContent = '撤销'
-      undo.style.cssText = 'font:inherit;padding:4px 10px;border-radius:8px;border:1px solid #ffffff44;background:transparent;color:#fff;cursor:pointer'
-      const done = document.createElement('button')
-      done.type = 'button'
-      done.textContent = '完成'
-      done.style.cssText = 'font:inherit;padding:4px 10px;border-radius:8px;border:1px solid #ffffff44;background:#fff;color:#1f2328;cursor:pointer'
-      bar.append(text, undo, done)
-      document.body.appendChild(bar)
-
-      const refreshBar = () => {
-        text.textContent = '点选要隐藏的元素 · 已隐藏 ' + values.picked.length + ' 个'
-        undo.disabled = values.picked.length === 0
-      }
-      refreshBar()
-
-      undo.addEventListener('click', () => {
-        if (values.picked.length === 0) return
-        removePickedAt(values.picked.length - 1)
-        refreshBar()
-      })
-      done.addEventListener('click', () => stopPicker())
-
-      const state = { bar, onClick: null, onMove: null, outlined: null, savedOutline: '' }
-
-      state.onMove = (event) => {
-        const el = event.target instanceof Element ? event.target : null
-        if (el === null || el === state.outlined) return
-        if (state.outlined !== null) state.outlined.style.outline = state.savedOutline
-        state.outlined = null
-        if (el === document.body || el === document.documentElement) return
-        if (bar.contains(el)) return
-        state.outlined = el
-        state.savedOutline = el.style.outline
-        el.style.outline = isProtected(el) ? '2px dashed #e5484d' : '2px solid #2c7be5'
-      }
-
-      state.onClick = (event) => {
-        const el = event.target instanceof Element ? event.target : null
-        if (el === null || bar.contains(el)) return
-        // Clicks on this plugin's own card must keep working — that is where
-        // 「结束点选」and the restore rows live.
-        if (el.closest('.dhns-form') !== null) return
-        event.preventDefault()
-        event.stopPropagation()
-        if (isProtected(el)) {
-          text.textContent = '这一项不能隐藏：它会挡住设置入口'
-          setTimeout(refreshBar, 1800)
-          return
-        }
-        const result = addPicked(el)
-        text.textContent =
-          result !== null && result.duplicate
-            ? '这一项已经隐藏过了'
-            : '已隐藏：' + labelFor(el) + '（可撤销）'
-        setTimeout(refreshBar, 1400)
-        if (state.outlined !== null) {
-          state.outlined.style.outline = state.savedOutline
-          state.outlined = null
-        }
-      }
-
-      state.onKeyDown = (event) => {
-        if (event.key === 'Escape') {
-          event.preventDefault()
-          event.stopPropagation()
-          stopPicker()
-        }
-      }
-
-      document.addEventListener('mousemove', state.onMove, true)
-      document.addEventListener('click', state.onClick, true)
-      document.addEventListener('keydown', state.onKeyDown, true)
-      picker = state
-      notify()
     }
 
     /**
@@ -771,61 +473,6 @@ window.__ModuleLoader__.load({
         )
       }
 
-      const pickedBlock = () => {
-        const running = picker !== null
-        return [
-          h(
-            'div',
-            { className: 'dhns-actions', key: 'actions' },
-            h(
-              'button',
-              {
-                type: 'button',
-                className: 'dhns-btn',
-                'data-tone': running ? undefined : 'primary',
-                onClick: () => (running ? stopPicker() : startPicker()),
-              },
-              running ? '结束点选' : '开始点选隐藏',
-            ),
-            values.picked.length === 0
-              ? null
-              : h(
-                  'button',
-                  {
-                    type: 'button',
-                    className: 'dhns-btn',
-                    onClick: () => {
-                      values = { ...values, picked: [] }
-                      writeStore()
-                      syncStyle()
-                      notify()
-                    },
-                  },
-                  '全部恢复',
-                ),
-          ),
-          values.picked.length === 0
-            ? null
-            : h(
-                'div',
-                { className: 'dhns-picked', key: 'list' },
-                values.picked.map((one, index) =>
-                  h(
-                    'div',
-                    { className: 'dhns-pickedRow', key: one.selector + ':' + index },
-                    h('code', { className: 'dhns-sel', title: one.selector }, one.selector),
-                    h('span', { className: 'dhns-hint' }, one.label),
-                    h(
-                      'button',
-                      { type: 'button', className: 'dhns-btn', onClick: () => removePickedAt(index) },
-                      '恢复',
-                    ),
-                  ),
-                ),
-              ),
-        ]
-      }
-
       return h(
         'div',
         { className: 'dhns-form' },
@@ -841,7 +488,6 @@ window.__ModuleLoader__.load({
                 ? null
                 : h('span', { className: 'dhns-sectionHint' }, section.hint),
             ),
-            section.kind === 'picked' ? pickedBlock() : null,
             section.fields.length === 0 ? null : h('div', { className: 'dhns-rows' }, section.fields.map(renderField)),
             section.panels === true ? panelBlock() : null,
           ),
@@ -914,20 +560,13 @@ window.__ModuleLoader__.load({
         }, 'dsh-sidebar-declutter: stylesheet')
 
 
-        ctx.effect(() =>
-          ctx.slots.inject('sidebar.footer.action', () =>
-            ctx.slots.register(
-              { name: 'sidebar.footer.action', id: 'sidebar-declutter-collapse', order: 10 },
-              CollapseAction,
+        if (ENABLE_ROW_CONFIG) {
+          ctx.effect(() =>
+            ctx.slots.inject('plugins.row.config', () =>
+              ctx.slots.register({ name: 'plugins.row.config', key: ROW_CONFIG_KEY }, SettingsCard),
             ),
-          ),
-        )
-
-        ctx.effect(() =>
-          ctx.slots.inject('plugins.row.config', () =>
-            ctx.slots.register({ name: 'plugins.row.config', key: ROW_CONFIG_KEY }, SettingsCard),
-          ),
-        )
+          )
+        }
       },
     }
   },
