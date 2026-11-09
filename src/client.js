@@ -129,6 +129,8 @@ window.__ModuleLoader__.load({
       sidebarMore: true,
       rightMore: true,
       headerMore: false,
+      /** The bulk layer the footer button drives; never persisted. */
+      collapsedAll: false,
       /** Panel ids (from `sidebar.panellist`) the user ticked off. */
       hiddenPanels: [],
     }
@@ -278,6 +280,15 @@ window.__ModuleLoader__.load({
           'button[class*="_viewsMore"]{display:none!important}',
         )
       }
+      if (values.collapsedAll === true) {
+        // The bulk layer only: every panel row plus the list's More launcher. The
+        // individual switches and the checkbox list stay untouched.
+        rules.push(
+          '[class*="_panelList"] > button[aria-label]{display:none!important}',
+          '[class*="_panelList"] [class*="_moreAnchor"]{display:none!important}',
+          '[class*="_panelList"] button[aria-haspopup="menu"]{display:none!important}',
+        )
+      }
       for (const id of values.hiddenPanels) {
         const entry = panelEntries.find((one) => one.id === id)
         if (entry === undefined) continue
@@ -301,6 +312,13 @@ window.__ModuleLoader__.load({
       'letter-spacing:.02em;color:var(--dsw-alias-label-primary)}',
       '.dhns-sectionHint{font-size:11px;line-height:1.4;color:var(--dsw-alias-label-tertiary)}',
       '.dhns-rows{display:flex;flex-direction:column;gap:8px}',
+      '.dhns-footer-btn{display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;',
+      'padding:7px 8px;margin:0 0 2px;border:0;border-radius:var(--dsw-radius-md,8px);',
+      'background:transparent;color:var(--dsw-alias-label-primary);font:inherit;text-align:left;cursor:pointer}',
+      '.dhns-footer-btn:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+      '.dhns-footer-btn[data-rail=true]{justify-content:center;width:36px;height:36px;padding:0;margin:0 auto 2px}',
+      '.dhns-footer-icon{flex:none;width:14px;text-align:center;opacity:.75}',
+      '.dhns-footer-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.dhns-row{display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:8px 10px;',
       'border-radius:var(--dsw-radius-md,8px);border:1px solid var(--dsw-alias-border-secondary,rgba(128,128,128,.18))}',
       '.dhns-row:hover{background:var(--dsw-alias-interactive-bg-hover)}',
@@ -352,6 +370,47 @@ window.__ModuleLoader__.load({
     /** Escape a value for a double-quoted CSS attribute selector. */
     function cssAttrValue(value) {
       return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+    }
+
+    // --- collapse control -------------------------------------------------------
+    // `sidebar.panellist` rows are navigation by contract, so an action has no
+    // seat there. `sidebar.footer.action` is an official list slot the sidebar
+    // renders itself — no DOM injection, and a re-render cannot remove it.
+
+    function toggleCollapse() {
+      values = { ...values, collapsedAll: values.collapsedAll !== true }
+      writeStore()
+      syncStyle()
+      notify()
+    }
+
+    function collapseLabel() {
+      return values.collapsedAll === true ? '展开面板列表' : '收起面板列表'
+    }
+
+    /**
+     * The footer action: an official list slot the sidebar renders itself, so it
+     * cannot be removed by a re-render. `wide` collapses it to an icon in the rail.
+     */
+    function CollapseAction(props) {
+      const [, force] = React.useReducer((count) => count + 1, 0)
+      React.useEffect(() => subscribe(force), [])
+      const wide = props?.wide !== false
+      const label = collapseLabel()
+      return h(
+        'button',
+        {
+          type: 'button',
+          className: 'dhns-footer-btn',
+          'data-rail': wide ? undefined : 'true',
+          'aria-label': label,
+          'aria-pressed': values.collapsedAll === true ? 'true' : 'false',
+          title: label,
+          onClick: () => toggleCollapse(),
+        },
+        h('span', { className: 'dhns-footer-icon', 'aria-hidden': 'true' }, values.collapsedAll ? '▸' : '▾'),
+        wide ? h('span', { className: 'dhns-footer-label' }, label) : null,
+      )
     }
 
     function notify() {
@@ -559,6 +618,15 @@ window.__ModuleLoader__.load({
           }
         }, 'dsh-sidebar-declutter: stylesheet')
 
+
+        ctx.effect(() =>
+          ctx.slots.inject('sidebar.footer.action', () =>
+            ctx.slots.register(
+              { name: 'sidebar.footer.action', id: 'sidebar-declutter-collapse', order: 10 },
+              CollapseAction,
+            ),
+          ),
+        )
 
         if (ENABLE_ROW_CONFIG) {
           ctx.effect(() =>

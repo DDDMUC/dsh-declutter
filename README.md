@@ -60,6 +60,15 @@ dsh plugin install https://github.com/DDDMUC/dsh-sidebar-declutter
 
 值存在浏览器 `localStorage["dsh-sidebar-declutter"]`，不写 profile 配置：因此这个 bundle 不需要 Host 侧 Config schema，改一个开关也不会重启插件。代价是偏好跟着浏览器走，换浏览器或清站点数据会回到默认。
 
+## 收起 / 展开面板列表
+
+侧栏底部、设置按钮上方的动作按钮，注册在官方 list slot `sidebar.footer.action`——由侧栏自己渲染，不会被重渲染移除。
+
+- 驱动独立的一层 `collapsedAll`：收起时隐藏全部面板行与「更多」
+- **不动手工勾选**：展开后，之前勾掉的面板仍然隐藏
+- 折叠状态不持久化，刷新后一定是展开
+- 窄栏（rail）时缩成图标
+
 ## 排布：三选一
 
 `panelLayout` 是单选值，不是三个独立开关——同时启用两套布局规则会互相覆盖，所以设计成一个 `<fieldset>` + 共享 `name` 的 radio 组，浏览器层面就保证只能选一个。
