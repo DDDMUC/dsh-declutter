@@ -117,7 +117,7 @@ window.__ModuleLoader__.load({
       {
         kind: 'picked',
         title: '自由隐藏',
-        hint: '点「开始点选」，然后点击界面上任意一个元素，它就会被收起来。',
+        hint: '点「开始点选」，再点界面上任意一个元素——它会作为一个条目出现在下面，勾上才隐藏。',
         fields: [],
       },
     ]
@@ -318,6 +318,8 @@ window.__ModuleLoader__.load({
         }
       }
       for (const one of values.picked) {
+        // Entries written before this flag existed were already hidden; keep them.
+        if (one.enabled === false) continue
         rules.push(one.selector + '{display:none!important}')
       }
       return rules
@@ -348,7 +350,7 @@ window.__ModuleLoader__.load({
       'color:var(--dsw-alias-label-primary);margin-bottom:2px}',
       '.dhns-option[data-selected=true]{border-color:var(--dsw-alias-state-business-primary,rgba(44,123,229,.55));',
       'background:var(--dsw-alias-interactive-bg-hover)}',
-      '.dhns-text{display:flex;flex-direction:column;gap:2px;min-width:0}',
+      '.dhns-text{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}',
       '.dhns-title{font-size:13px;color:var(--dsw-alias-label-primary)}',
       '.dhns-hint{font-size:11px;line-height:1.45;color:var(--dsw-alias-label-tertiary)}',
       '.dhns-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}',
@@ -652,7 +654,9 @@ window.__ModuleLoader__.load({
       const selector = buildSelector(el)
       if (selector.trim() === '') return null
       if (values.picked.some((one) => one.selector === selector)) return { selector, duplicate: true }
-      const entry = { selector, label: labelFor(el) }
+      // Added as a candidate: it hides only once its checkbox is ticked, so a
+      // stray click can never take something off the screen by itself.
+      const entry = { selector, label: labelFor(el), enabled: false }
       values = { ...values, picked: [...values.picked, entry] }
       writeStore()
       syncStyle()
@@ -746,9 +750,9 @@ window.__ModuleLoader__.load({
         const result = addPicked(el)
         text.textContent =
           result !== null && result.duplicate
-            ? '这一项已经隐藏过了'
-            : '已隐藏：' + labelFor(el) + '（可撤销）'
-        setTimeout(refreshBar, 1400)
+            ? '这一项已经在列表里了'
+            : '已加入列表：' + labelFor(el) + '（去设置里勾选才会隐藏）'
+        setTimeout(refreshBar, 2000)
         if (state.outlined !== null) {
           state.outlined.style.outline = state.savedOutline
           state.outlined = null
@@ -889,6 +893,16 @@ window.__ModuleLoader__.load({
         )
       }
 
+      const togglePicked = (index, on) => {
+        const next = values.picked.map((one, position) =>
+          position === index ? { ...one, enabled: on } : one,
+        )
+        values = { ...values, picked: next }
+        writeStore()
+        syncStyle()
+        notify()
+      }
+
       const pickedBlock = () => {
         const running = picker !== null
         return [
@@ -903,7 +917,7 @@ window.__ModuleLoader__.load({
                 'data-tone': running ? undefined : 'primary',
                 onClick: () => (running ? stopPicker() : startPicker()),
               },
-              running ? '结束点选' : '开始点选隐藏',
+              running ? '结束点选' : '开始点选',
             ),
             values.picked.length === 0
               ? null
@@ -919,24 +933,44 @@ window.__ModuleLoader__.load({
                       notify()
                     },
                   },
-                  '全部恢复',
+                  '清空列表',
                 ),
           ),
           values.picked.length === 0
-            ? null
+            ? h('p', { className: 'dhns-hint', key: 'empty' }, '还没有点选任何元素。')
             : h(
                 'div',
-                { className: 'dhns-picked', key: 'list' },
+                { className: 'dhns-rows', key: 'list' },
                 values.picked.map((one, index) =>
                   h(
-                    'div',
-                    { className: 'dhns-pickedRow', key: one.selector + ':' + index },
-                    h('code', { className: 'dhns-sel', title: one.selector }, one.selector),
-                    h('span', { className: 'dhns-hint' }, one.label),
+                    'label',
+                    { className: 'dhns-row', key: one.selector + ':' + index },
+                    h('input', {
+                      type: 'checkbox',
+                      checked: one.enabled !== false,
+                      onChange: (event) => togglePicked(index, event.target.checked === true),
+                    }),
+                    h(
+                      'span',
+                      { className: 'dhns-text' },
+                      h('span', { className: 'dhns-title' }, one.label),
+                      h(
+                        'span',
+                        { className: 'dhns-hint dhns-sel', title: one.selector },
+                        one.selector,
+                      ),
+                    ),
                     h(
                       'button',
-                      { type: 'button', className: 'dhns-btn', onClick: () => removePickedAt(index) },
-                      '恢复',
+                      {
+                        type: 'button',
+                        className: 'dhns-btn',
+                        onClick: (event) => {
+                          event.preventDefault()
+                          removePickedAt(index)
+                        },
+                      },
+                      '移除',
                     ),
                   ),
                 ),
