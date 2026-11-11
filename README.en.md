@@ -1,4 +1,4 @@
-# dsh-sidebar-declutter
+# dsh-ui-hide
 
 English | [中文](README.md)
 
@@ -10,13 +10,13 @@ Open **Plugins → Add** in DSH and paste the package name or this repository:
 
 ```bash
 # npm (preferred)
-dsh plugin install dsh-sidebar-declutter
+dsh plugin install dsh-ui-hide
 
 # or straight from the repo
-dsh plugin install https://github.com/DDDMUC/dsh-sidebar-declutter
+dsh plugin install https://github.com/DDDMUC/dsh-ui-hide
 ```
 
-Then open **Plugins → Installed → dsh-sidebar-declutter** and use the configure arrow on that bundle's row.
+Then open **Plugins → Installed → dsh-ui-hide** and use the configure arrow on that bundle's row.
 
 ## Defaults
 

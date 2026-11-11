@@ -1,4 +1,4 @@
-# dsh-sidebar-declutter
+# dsh-ui-hide
 
 [English](README.en.md) | 中文
 
@@ -10,13 +10,13 @@ DSH 侧栏整理插件：按开关收起顶部品牌行、「新会话」按钮�
 
 ```bash
 # npm（推荐）
-dsh plugin install dsh-sidebar-declutter
+dsh plugin install dsh-ui-hide
 
 # 或直接从仓库
-dsh plugin install https://github.com/DDDMUC/dsh-sidebar-declutter
+dsh plugin install https://github.com/DDDMUC/dsh-ui-hide
 ```
 
-装好后打开 **插件 → 已安装 → dsh-sidebar-declutter**，点该 bundle 下面那一行的配置箭头即可调整。
+装好后打开 **插件 → 已安装 → dsh-ui-hide**，点该 bundle 下面那一行的配置箭头即可调整。
 
 ## 默认设置
 
@@ -26,7 +26,7 @@ dsh plugin install https://github.com/DDDMUC/dsh-sidebar-declutter
 
 ## 设置页
 
-注册在 `plugins.row.config`，key 是 `<包名>#<patch 行 id>` = `dsh-sidebar-declutter#sidebar-declutter`。打开路径：**插件 → 已安装 → dsh-sidebar-declutter → 该 bundle 下面那行的配置箭头**。行摘要会直接显示「已隐藏：…」。
+注册在 `plugins.row.config`，key 是 `<包名>#<patch 行 id>` = `dsh-ui-hide#sidebar-declutter`。打开路径：**插件 → 已安装 → dsh-ui-hide → 该 bundle 下面那行的配置箭头**。行摘要会直接显示「已隐藏：…」。
 
 开关分两组，改动立即生效，不重启插件、不重载页面：
 
@@ -58,7 +58,7 @@ dsh plugin install https://github.com/DDDMUC/dsh-sidebar-declutter
 
 旧版本存的是布尔值 `panelGrid`：`true` 迁移为 `two`（该键最初就是「一行两个」的意思），`false` 迁移为 `stack`。存储值非法时回落到默认。
 
-值存在浏览器 `localStorage["dsh-sidebar-declutter"]`，不写 profile 配置：因此这个 bundle 不需要 Host 侧 Config schema，改一个开关也不会重启插件。代价是偏好跟着浏览器走，换浏览器或清站点数据会回到默认。
+值存在浏览器 `localStorage["dsh-ui-hide"]`，不写 profile 配置：因此这个 bundle 不需要 Host 侧 Config schema，改一个开关也不会重启插件。代价是偏好跟着浏览器走，换浏览器或清站点数据会回到默认。
 
 ## 收起 / 展开面板列表
 
@@ -228,7 +228,7 @@ macOS 桌面端品牌行只有装饰用的 span（折叠按钮在上方那条 `t
   - `button[class*="_newSession"] { display: none !important }`
   - `[class*="_panelList"] [class*="_moreAnchor"]`, `[class*="_panelList"] button[aria-haspopup="menu"]` → `display: none !important`
 - 选择器锚在 CSS Module 的**本地名后缀**上，不用构建哈希前缀（前缀每次构建都变，本地名跟随源码）；「更多」另有一条纯结构选择器兜底
-- 样式表带 `data-dsh-sidebar-declutter` 标记，重复执行会就地重写而不是叠加
+- 样式表带 `data-dsh-ui-hide` 标记，重复执行会就地重写而不是叠加
 - 2 秒后自检：侧栏已渲染（存在 `_panelList`）但仍匹配不到按钮时，控制台 `console.warn` 提示选择器可能已随版本变化——不会静默失效
 
 ## 还原

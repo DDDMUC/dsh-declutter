@@ -1,4 +1,4 @@
-// dsh-sidebar-declutter — client half.
+// dsh-ui-hide — client half.
 //
 // Each row is rendered straight into the layout by a shipped package, so none of
 // them is a slot registration and no config switch exists for any of them:
@@ -24,7 +24,7 @@
 // Settings live in localStorage rather than the loader Config: the entry needs no
 // Host schema, changes apply without a restart, and every surface reads one store.
 window.__ModuleLoader__.load({
-  id: 'dsh-sidebar-declutter',
+  id: 'dsh-ui-hide',
   factory: (require) => {
     const React = require('react')
     const h = React.createElement
@@ -36,11 +36,11 @@ window.__ModuleLoader__.load({
     const ENABLE_ROW_CONFIG = true
 
     /** Row-config key: `<bundle package>#<row id from the bundle patch>`. */
-    const ROW_CONFIG_KEY = 'dsh-sidebar-declutter#sidebar-declutter'
-    const STORE_KEY = 'dsh-sidebar-declutter'
+    const ROW_CONFIG_KEY = 'dsh-ui-hide#hide-rows'
+    const STORE_KEY = 'dsh-ui-hide'
     /** Key this bundle stored its settings under before the rename. */
     const LEGACY_STORE_KEY = 'dsh-hide-new-session'
-    const STYLE_ATTR = 'data-dsh-sidebar-declutter'
+    const STYLE_ATTR = 'data-dsh-ui-hide'
 
     /**
      * The page groups its switches under headings; the flat `FIELDS` below is
@@ -52,38 +52,20 @@ window.__ModuleLoader__.load({
         kind: 'hide',
         title: '左栏',
         panels: true,
+        columns: 3,
         fields: [
-          {
-            key: 'brand',
-            title: '顶部品牌行（deepseek HARNESS）',
-            hint: '侧栏最上面那一行。macOS 上它只是装饰，不含任何控件；Windows/Linux 上该行右侧还有折叠按钮，那种情况下只隐藏品牌本身、保留按钮。',
-          },
-          {
-            key: 'newSession',
-            title: '「新会话」按钮',
-            hint: '侧栏品牌行下面那一行。隐藏后仍可用快捷键和工作区那行的 + 新建会话。',
-          },
-          {
-            key: 'sidebarMore',
-            title: '左栏面板列表的「更多」',
-            hint: '收起这一行后，面板将无法再取消固定，已固定的面板会一直列在侧栏。',
-          },
+          { key: 'brand', title: '顶部品牌行（deepseek HARNESS）' },
+          { key: 'newSession', title: '「新会话」按钮' },
+          { key: 'sidebarMore', title: '左栏面板列表的「更多」' },
         ],
       },
       {
         kind: 'hide',
         title: '其它位置',
+        columns: 2,
         fields: [
-          {
-            key: 'rightMore',
-            title: '右侧栏起始页的「更多」',
-            hint: '右栏 guide 页底部的「更多」，只影响右侧栏。',
-          },
-          {
-            key: 'headerMore',
-            title: '会话头部 View 行的「更多」',
-            hint: 'View 标签行右端的 ⋯ 图标按钮，界面上没有「更多」两个字。',
-          },
+          { key: 'rightMore', title: '右侧栏起始页的「更多」' },
+          { key: 'headerMore', title: '会话头部 View 行的「更多」' },
         ],
       },
       {
@@ -92,27 +74,21 @@ window.__ModuleLoader__.load({
         fields: [
           {
             key: 'panelLayout',
-            title: '面板列表排布',
             type: 'choice',
+            inline: true,
             options: [
-              {
-                value: 'stack',
-                title: '一列',
-                hint: '每个面板独占一行，和界面原样一致。',
-              },
-              {
-                value: 'two',
-                title: '一行两个',
-                hint: '固定两列网格，左右对齐；名字长的会被截断成省略号。',
-              },
-              {
-                value: 'wrap',
-                title: '自动紧凑',
-                hint: '按名字宽度自动换行：两个字的一行能放三四个，长名字占多少算多少，不截断。「更多」排在第二个面板之后。',
-              },
+              { value: 'stack', title: '一列' },
+              { value: 'two', title: '两列' },
+              { value: 'wrap', title: '自动紧凑' },
             ],
           },
         ],
+      },
+      {
+        kind: 'menu',
+        title: '会话菜单',
+        hint: '打开一次会话菜单（右键会话行）后，这里会列出这份构建真正渲染过的条目；勾上即隐藏，取消即恢复。',
+        fields: [],
       },
       {
         kind: 'picked',
@@ -141,6 +117,8 @@ window.__ModuleLoader__.load({
       picked: [],
       /** Panel ids (from `sidebar.panellist`) the user ticked off. */
       hiddenPanels: [],
+      /** Panel ids in the order the user dragged them into. */
+      panelOrder: [],
     }
 
     /** Accepted values of the layout choice, keyed by field. */
@@ -176,6 +154,9 @@ window.__ModuleLoader__.load({
         if (Array.isArray(parsed?.hiddenPanels)) {
           next.hiddenPanels = parsed.hiddenPanels.filter((one) => typeof one === 'string')
         }
+        if (Array.isArray(parsed?.panelOrder)) {
+          next.panelOrder = parsed.panelOrder.filter((one) => typeof one === 'string')
+        }
         if (parsed?.panelLayout === undefined && typeof parsed?.panelGrid === 'boolean') {
           // `panelGrid` was introduced meaning "two per row" before it briefly
           // meant "wrap"; `true` keeps the two-column reading.
@@ -193,6 +174,206 @@ window.__ModuleLoader__.load({
       } catch {
         // Private mode: the switch still applies for this page.
       }
+    }
+
+    // --- menu rows: free hiding -------------------------------------------------
+    //
+    // Menu rows are not slots a plugin can drop; the shipped ones are rendered by
+    // the product and only `display: none` takes them away. Which rows exist is
+    // discovered from real menu opens (label + accelerator), so the page lists
+    // what this build really renders. Nothing is hidden until it is ticked.
+
+    const MENU_STORE_KEY = 'dsh-ui-hide.menu'
+    const MENU_STORE_VERSION = 2
+    const MENU_HIDDEN_ATTR = 'data-dsd-menu-hidden'
+
+    /**
+     * The Session menu's shipped rows, listed up front so nothing has to be
+     * opened once before it can be ticked. Each rule matches the row's text at
+     * its start, so a trailing accelerator or a language switch still hits.
+     * Rows this build renders that are not listed here are appended by discovery.
+     */
+    const MENU_PRESETS = [
+      { key: '重命名', accel: 'Ctrl+Alt+G', rule: /^(重命名|Rename)/, aria: ['Control+Alt+G', 'Ctrl+Alt+G', '⌘+⌥+G'] },
+      { key: '归档会话', accel: '', rule: /^(归档会话|Archive)/, aria: ['Control+Shift+A', 'Ctrl+Shift+A', '⌘+⇧+A'] },
+      { key: '取消归档', accel: '', rule: /^(取消归档|Unarchive)/, aria: [] },
+      { key: '置顶会话', accel: '', rule: /^(置顶会话|Pin)/, aria: [] },
+      { key: '取消置顶', accel: '', rule: /^(取消置顶|Unpin)/, aria: [] },
+    ]
+
+    /**
+     * Rows that carry an accelerator can be hidden by CSS, before the menu is ever
+     * painted — no timing to lose. Rows without one still go through the DOM sweep.
+     */
+    function menuCssRules() {
+      const rules = []
+      for (const preset of MENU_PRESETS) {
+        if (!menuState.hidden.includes(preset.key)) continue
+        for (const aria of preset.aria) {
+          rules.push(`[role="menuitem"][aria-keyshortcuts="${aria}"]{display:none!important}`)
+        }
+      }
+      return rules
+    }
+
+    /** @type {{ hidden: string[], seen: { key: string, accel: string }[] }} */
+    let menuState = { hidden: [], seen: [] }
+
+    function readMenuState() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(MENU_STORE_KEY) || 'null')
+        if (!parsed) return
+        const hidden = Array.isArray(parsed.hidden)
+          ? parsed.hidden.filter((one) => typeof one === 'string')
+          : []
+        // v1 recorded rows from every menu on the desktop — including the system
+        // "open with" list — so its `seen` is thrown away, keeping the switches.
+        const seen = parsed.version === MENU_STORE_VERSION && Array.isArray(parsed.seen)
+          ? parsed.seen.filter((one) => one && typeof one.key === 'string')
+          : []
+        menuState = { hidden, seen }
+        if (parsed.version !== MENU_STORE_VERSION) writeMenuState()
+      } catch {
+        // Private mode: the switches still apply for this page.
+      }
+    }
+
+    function writeMenuState() {
+      try {
+        localStorage.setItem(
+          MENU_STORE_KEY,
+          JSON.stringify({ version: MENU_STORE_VERSION, hidden: menuState.hidden, seen: menuState.seen }),
+        )
+      } catch {
+        // Same.
+      }
+    }
+
+    /** True when a stored row id is really one of the presets (a legacy record). */
+    function isPresetMenuKey(key) {
+      return MENU_PRESETS.some((one) => one.rule.test(key))
+    }
+
+    /** A row's identity: a preset name when one matches, else its normalized text. */
+    function menuRowKey(item) {
+      const text = (item.textContent || '').replace(/\s+/g, ' ').trim()
+      for (const preset of MENU_PRESETS) {
+        if (preset.rule.test(text)) return preset.key
+      }
+      return text
+    }
+
+    /** True when this row is one of the shipped Session actions. */
+    function isSessionMenuItem(item) {
+      const text = (item.textContent || '').replace(/\s+/g, ' ').trim()
+      return MENU_PRESETS.some((one) => one.rule.test(text))
+    }
+
+    function menuSweep() {
+      // `[role="menuitem"]` is used by every menu on the desktop — the system
+      // "open with" list included. A menu only counts when it carries a shipped
+      // Session action, so unrelated lists are never read and never recorded.
+      const groups = new Map()
+      for (const item of document.querySelectorAll('[role="menuitem"]')) {
+        const root = item.closest('[role="menu"]') || item.parentElement
+        if (root === null) continue
+        const list = groups.get(root)
+        if (list === undefined) groups.set(root, [item])
+        else list.push(item)
+      }
+      let added = false
+      for (const items of groups.values()) {
+        if (!items.some((item) => isSessionMenuItem(item))) continue
+        for (const item of items) {
+          // A marked node was already handled in this batch. The next menu open
+          // mounts a fresh set, so "unhide after unticking" needs no bookkeeping.
+          if (item.hasAttribute(MENU_HIDDEN_ATTR)) continue
+          const key = menuRowKey(item)
+          if (!key) continue
+          // Only a menu opened from a Session row is recorded: that is what keeps
+          // unrelated lists (the system "open with" menu) out of the settings page.
+          if (menuFromSessionRow && !menuState.seen.some((one) => one.key === key)) {
+            menuState.seen.push({ key, accel: item.getAttribute('aria-keyshortcuts') || '' })
+            added = true
+          }
+          if (!menuState.hidden.includes(key)) continue
+          item.setAttribute(MENU_HIDDEN_ATTR, '')
+          item.style.display = 'none'
+        }
+      }
+      if (added) {
+        writeMenuState()
+        notify()
+      }
+    }
+
+    let menuObserver = null
+    let menuObserverTimer = 0
+    let menuSweepQueued = false
+
+    /** Coalesce a burst of mutations into one sweep, before the next paint. */
+    function menuQueueSweep() {
+      if (menuSweepQueued) return
+      menuSweepQueued = true
+      const run = () => {
+        menuSweepQueued = false
+        menuSweep()
+      }
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run)
+      else setTimeout(run, 0)
+    }
+
+    /**
+     * Watch for the menu's first insertion instead of waiting for it. The observer
+     * runs only inside a short window after a click, and the sweep itself is queued
+     * on the next frame — which lands before that frame paints, so the rows never
+     * appear unhidden first. A standing body-wide observer is what would be
+     * expensive; a 400ms window is not.
+     */
+    function menuWatchForMount() {
+      if (typeof MutationObserver !== 'function') return
+      if (menuObserver === null) {
+        menuObserver = new MutationObserver(menuQueueSweep)
+        menuObserver.observe(document.documentElement, { childList: true, subtree: true })
+      }
+      clearTimeout(menuObserverTimer)
+      menuObserverTimer = setTimeout(() => {
+        menuObserver.disconnect()
+        menuObserver = null
+      }, 400)
+    }
+
+    /** Set while the click that opens a menu came from a Session row. */
+    let menuFromSessionRow = false
+
+    /** Menus mount a frame or two after the click that opens them. */
+    function menuScheduleSweep(fromSessionRow) {
+      if (fromSessionRow) menuFromSessionRow = true
+      menuSweep()
+      menuWatchForMount()
+      for (const delay of [40, 120, 260]) setTimeout(menuSweep, delay)
+      setTimeout(() => {
+        menuFromSessionRow = false
+      }, 600)
+    }
+
+    /** Drop the watch when the plugin goes away. */
+    function menuStopWatch() {
+      clearTimeout(menuObserverTimer)
+      if (menuObserver !== null) {
+        menuObserver.disconnect()
+        menuObserver = null
+      }
+    }
+
+    function setMenuRowHidden(key, hide) {
+      const next = menuState.hidden.filter((one) => one !== key)
+      if (hide) next.push(key)
+      menuState = { ...menuState, hidden: next }
+      writeMenuState()
+      syncStyle()
+      notify()
+      menuSweep()
     }
 
     function setValue(key, value) {
@@ -274,23 +455,22 @@ window.__ModuleLoader__.load({
           '[class*="_root"]:not([class*="_collapsed"]) [class*="_panelList"]'
             + ' > [class*="_panelRow"]{flex:0 0 auto!important;width:auto!important;'
             + 'max-width:100%}',
-          // The More launcher is the last child in the DOM, and flex-wrap only
-          // fills forward: an item that does not fit never looks back at a hole
-          // left on the line above. Its turn therefore always comes with a full
-          // line above it, so it drops to a row of its own no matter how much room
-          // the first line has.
-          //
-          // Sitting it after the second panel is a fixed ordering by position:
-          // panel rows are the nav's only `button` children (the More trigger is
-          // nested inside its `_moreAnchor` wrapper), so `:nth-of-type(n+3)` is
-          // exactly "the third panel onwards", and the anchor stays in the default
-          // order-0 group behind them. When the first line has no room left, the
-          // anchor simply wraps and lands under the panels — the same rule then
-          // degrades gracefully instead of overlapping anything.
           '[class*="_root"]:not([class*="_collapsed"]) [class*="_panelList"]'
             + ' > button:nth-of-type(n+3){order:1}',
           '[class*="_root"]:not([class*="_collapsed"]) [class*="_panelList"]'
             + ' > [class*="_moreAnchor"]{order:0}',
+        )
+      }
+      if (values.panelOrder.length > 0) {
+        // The user's arrangement becomes the real order, and the More launcher
+        // keeps trailing it. `!important` beats the wrap-mode rule above.
+        const ordered = orderedPanelEntries()
+        ordered.forEach((entry, index) => {
+          rules.push(`[${PANEL_ATTR}="${entry.id}"]{order:${index + 1}!important}`)
+        })
+        rules.push(
+          '[class*="_root"]:not([class*="_collapsed"]) [class*="_panelList"]'
+            + ` > [class*="_moreAnchor"]{order:${ordered.length + 1}!important}`,
         )
       }
       if (values.sidebarMore) {
@@ -352,6 +532,12 @@ window.__ModuleLoader__.load({
       'letter-spacing:.02em;color:var(--dsw-alias-label-primary)}',
       '.dhns-sectionHint{font-size:11px;line-height:1.4;color:var(--dsw-alias-label-tertiary)}',
       '.dhns-rows{display:flex;flex-direction:column;gap:8px}',
+      '.dhns-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}',
+      '.dhns-grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}',
+      '.dhns-grid .dhns-row{padding:6px 8px;align-items:center;border-radius:6px}',
+      '.dhns-grid .dhns-title{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.dhns-grid .dhns-hint{font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.dhns-grid .dhns-text{gap:0}',
       '.dhns-footer-btn{display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;',
       'padding:7px 8px;margin:0 0 2px;border:0;border-radius:var(--dsw-radius-md,8px);',
       'background:transparent;color:var(--dsw-alias-label-primary);font:inherit;text-align:left;cursor:pointer}',
@@ -363,7 +549,14 @@ window.__ModuleLoader__.load({
       'border-radius:var(--dsw-radius-md,8px);border:1px solid var(--dsw-alias-border-secondary,rgba(128,128,128,.18))}',
       '.dhns-row:hover{background:var(--dsw-alias-interactive-bg-hover)}',
       '.dhns-row input{margin:2px 0 0;flex:none}',
+      '.dhns-grip{flex:none;cursor:grab;user-select:none;line-height:1;font-size:13px;',
+      'color:var(--dsw-alias-label-tertiary,#9aa0a6);padding:1px 0}',
+      '.dhns-grip:active{cursor:grabbing}',
+      '.dhns-rowDragging{opacity:.45}',
       '.dhns-choice{margin:0;padding:0;border:0;display:flex;flex-direction:column;gap:8px}',
+      '.dhns-choiceInline{flex-direction:row;flex-wrap:wrap;gap:6px}',
+      '.dhns-choiceInline .dhns-row{flex:1 1 0;min-width:0;padding:6px 10px}',
+      '.dhns-choiceInline .dhns-title{white-space:nowrap}',
       '.dhns-legend{padding:0;font-size:13px;font-weight:500;',
       'color:var(--dsw-alias-label-primary);margin-bottom:2px}',
       '.dhns-option[data-selected=true]{border-color:var(--dsw-alias-state-business-primary,rgba(44,123,229,.55));',
@@ -393,6 +586,14 @@ window.__ModuleLoader__.load({
       '.dhns-footer-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.dhns-subhead{font-size:12px;font-weight:500;letter-spacing:.02em;',
       'color:var(--dsw-alias-label-secondary);margin-top:4px}',
+      '.dhns-subheadRow{display:flex;align-items:center;justify-content:space-between;',
+      'gap:8px;margin-top:4px}',
+      '.dhns-subheadRow .dhns-subhead{margin-top:0}',
+      '.dhns-subheadBtn{font:inherit;font-size:11px;line-height:16px;padding:1px 8px;cursor:pointer;',
+      'border-radius:6px;border:1px solid var(--dsw-alias-border-secondary,rgba(128,128,128,.3));',
+      'background:transparent;color:var(--dsw-alias-label-secondary)}',
+      '.dhns-subheadBtn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}',
+      '.dhns-subheadBtn:disabled{opacity:.4;cursor:default}',
     ].join('')
 
     function syncStyle() {
@@ -403,7 +604,9 @@ window.__ModuleLoader__.load({
         tag.setAttribute(STYLE_ATTR, '1')
         document.head.appendChild(tag)
       }
-      const css = '/* dsh-sidebar-declutter */\n' + hiddenRules().join('\n') + '\n' + FORM_CSS
+      const css = '/* dsh-ui-hide */\n'
+        + hiddenRules().concat(menuCssRules()).join('\n')
+        + '\n' + FORM_CSS
       // The tag outlives the module instance: a newer build re-executing in the
       // same document must rewrite it rather than keep the old stylesheet.
       if (tag.textContent !== css) tag.textContent = css
@@ -491,6 +694,22 @@ window.__ModuleLoader__.load({
      * render order among the rest. A failed pass hides nothing, which is the safe
      * direction — every panel stays visible and can be re-ticked.
      */
+    /**
+     * Registered panels in the order the user dragged them into; anything they
+     * have not arranged yet keeps its registration order behind them.
+     */
+    function orderedPanelEntries() {
+      if (values.panelOrder.length === 0) return [...panelEntries]
+      const rank = new Map(values.panelOrder.map((id, index) => [id, index]))
+      const base = new Map(panelEntries.map((entry, index) => [entry.id, index]))
+      return [...panelEntries].sort((a, b) => {
+        const ra = rank.has(a.id) ? rank.get(a.id) : Number.MAX_SAFE_INTEGER
+        const rb = rank.has(b.id) ? rank.get(b.id) : Number.MAX_SAFE_INTEGER
+        if (ra !== rb) return ra - rb
+        return (base.get(a.id) ?? 0) - (base.get(b.id) ?? 0)
+      })
+    }
+
     function stampPanelRows() {
       try {
         const nav = findPanelNav()
@@ -513,7 +732,7 @@ window.__ModuleLoader__.load({
           if (row.getAttribute(PANEL_ATTR) !== id) row.setAttribute(PANEL_ATTR, id)
         }
       } catch (error) {
-        console.warn('[dsh-sidebar-declutter] 面板打标失败：', error)
+        console.warn('[dsh-ui-hide] 面板打标失败：', error)
       }
     }
 
@@ -628,7 +847,7 @@ window.__ModuleLoader__.load({
         return sel
       }
       for (const attr of Array.from(el.attributes)) {
-        if (attr.name.startsWith('data-') && attr.name !== 'data-dsh-sidebar-declutter') {
+        if (attr.name.startsWith('data-') && attr.name !== 'data-dsh-ui-hide') {
           return '[' + attr.name + ']'
         }
       }
@@ -810,6 +1029,7 @@ window.__ModuleLoader__.load({
     function SettingsCard(props) {
       const view = props?.view
       const [, forceRender] = React.useReducer((count) => count + 1, 0)
+      const [dragId, setDragId] = React.useState(null)
       React.useEffect(() => subscribe(forceRender), [])
 
       if (view === 'summary') {
@@ -845,8 +1065,14 @@ window.__ModuleLoader__.load({
       const choiceFor = (field) =>
         h(
           'fieldset',
-          { key: field.key, className: 'dhns-choice', 'aria-label': field.title },
-          h('legend', { className: 'dhns-legend' }, field.title),
+          {
+            key: field.key,
+            className: field.inline === true ? 'dhns-choice dhns-choiceInline' : 'dhns-choice',
+            'aria-label': field.title ?? field.key,
+          },
+          field.title === undefined
+            ? null
+            : h('legend', { className: 'dhns-legend' }, field.title),
           field.options.map((option) =>
             h(
               'label',
@@ -883,28 +1109,98 @@ window.__ModuleLoader__.load({
         notify()
       }
 
+      /** Drop `fromId` where `toId` sits, then persist the whole arrangement. */
+      const movePanel = (fromId, toId) => {
+        const ids = orderedPanelEntries().map((one) => one.id)
+        const from = ids.indexOf(fromId)
+        const to = ids.indexOf(toId)
+        if (from < 0 || to < 0 || from === to) return
+        const [moved] = ids.splice(from, 1)
+        ids.splice(to, 0, moved)
+        values = { ...values, panelOrder: ids }
+        writeStore()
+        syncStyle()
+        notify()
+      }
+
+      /** Drop the arrangement and fall back to the registration order. */
+      const resetPanelOrder = () => {
+        if (values.panelOrder.length === 0) return
+        values = { ...values, panelOrder: [] }
+        writeStore()
+        syncStyle()
+        notify()
+      }
+
       const panelBlock = () => {
         if (panelEntries.length === 0) {
           return h('p', { className: 'dhns-hint' }, '当前没有检测到已注册的面板。')
         }
         return h(
           'div',
-          { className: 'dhns-rows' },
-          h('div', { className: 'dhns-subhead', key: 'subhead' }, '面板'),
-          panelEntries.map((entry) =>
+          null,
+          h(
+            'div',
+            { className: 'dhns-subheadRow', key: 'subhead' },
+            h('span', { className: 'dhns-subhead' }, '面板'),
             h(
-              'label',
-              { key: entry.id, className: 'dhns-row' },
-              h('input', {
-                type: 'checkbox',
-                checked: values.hiddenPanels.includes(entry.id),
-                onChange: (event) => togglePanel(entry.id, event.target.checked === true),
-              }),
+              'button',
+              {
+                type: 'button',
+                className: 'dhns-subheadBtn',
+                disabled: values.panelOrder.length === 0,
+                onClick: resetPanelOrder,
+              },
+              '还原默认',
+            ),
+          ),
+          h(
+            'div',
+            { className: 'dhns-grid', key: 'grid' },
+            orderedPanelEntries().map((entry) =>
               h(
-                'span',
-                { className: 'dhns-text' },
-                h('span', { className: 'dhns-title' }, entry.label),
-                h('span', { className: 'dhns-hint' }, entry.id),
+                'label',
+                {
+                  key: entry.id,
+                  className: dragId === entry.id ? 'dhns-row dhns-rowDragging' : 'dhns-row',
+                  onDragOver: (event) => {
+                    if (dragId === null) return
+                    event.preventDefault()
+                    event.dataTransfer.dropEffect = 'move'
+                  },
+                  onDrop: (event) => {
+                    if (dragId === null) return
+                    event.preventDefault()
+                    movePanel(dragId, entry.id)
+                    setDragId(null)
+                  },
+                },
+                h(
+                  'span',
+                  {
+                    className: 'dhns-grip',
+                    title: '拖动排序',
+                    draggable: true,
+                    onDragStart: (event) => {
+                      setDragId(entry.id)
+                      event.dataTransfer.effectAllowed = 'move'
+                      event.dataTransfer.setData('text/plain', entry.id)
+                    },
+                    onDragEnd: () => setDragId(null),
+                  },
+                  '⠿',
+                ),
+                h('input', {
+                  type: 'checkbox',
+                  checked: values.hiddenPanels.includes(entry.id),
+                  onChange: (event) => togglePanel(entry.id, event.target.checked === true),
+                }),
+                h(
+                  'span',
+                  { className: 'dhns-text' },
+                  h('span', { className: 'dhns-title' }, entry.label),
+                  h('span', { className: 'dhns-hint' }, entry.id),
+                ),
               ),
             ),
           ),
@@ -996,6 +1292,42 @@ window.__ModuleLoader__.load({
         ]
       }
 
+      const menuBlock = () => {
+        const presetKeys = MENU_PRESETS.map((one) => one.key)
+        const other = menuState.seen
+          .filter((one) => !presetKeys.includes(one.key) && !isPresetMenuKey(one.key))
+          .sort((a, b) => a.key.localeCompare(b.key, 'zh'))
+        const rowOf = (one) =>
+          h(
+            'label',
+            { key: one.key, className: 'dhns-row' },
+            h('input', {
+              type: 'checkbox',
+              checked: menuState.hidden.includes(one.key),
+              onChange: (event) => setMenuRowHidden(one.key, event.target.checked === true),
+            }),
+            h(
+              'span',
+              { className: 'dhns-text' },
+              h('span', { className: 'dhns-title' }, one.key),
+              one.accel === '' ? null : h('span', { className: 'dhns-hint' }, one.accel),
+            ),
+          )
+        return h(
+          'div',
+          null,
+          h('div', { className: 'dhns-subhead', key: 'official' }, '官方'),
+          h('div', { className: 'dhns-grid', key: 'official-grid' },
+            MENU_PRESETS.map((one) => rowOf({ key: one.key, accel: one.accel }))),
+          other.length === 0
+            ? null
+            : h('div', { className: 'dhns-subhead', key: 'other' }, '社区（插件添加）'),
+          other.length === 0
+            ? null
+            : h('div', { className: 'dhns-grid', key: 'other-grid' }, other.map(rowOf)),
+        )
+      }
+
       return h(
         'div',
         { className: 'dhns-form' },
@@ -1011,8 +1343,21 @@ window.__ModuleLoader__.load({
                 ? null
                 : h('span', { className: 'dhns-sectionHint' }, section.hint),
             ),
-            section.fields.length === 0 ? null : h('div', { className: 'dhns-rows' }, section.fields.map(renderField)),
+            section.fields.length === 0
+              ? null
+              : h(
+                  'div',
+                  {
+                    className: section.columns === 2
+                      ? 'dhns-grid dhns-grid-2'
+                      : section.columns === 3
+                        ? 'dhns-grid'
+                        : 'dhns-rows',
+                  },
+                  section.fields.map(renderField),
+                ),
             section.kind === 'picked' ? pickedBlock() : null,
+            section.kind === 'menu' ? menuBlock() : null,
             section.panels === true ? panelBlock() : null,
           ),
         ),
@@ -1023,6 +1368,7 @@ window.__ModuleLoader__.load({
       inject: ['slots'],
       apply(ctx) {
         values = readStore()
+        readMenuState()
 
         // Mirror the panel registry the sidebar renders from: it is the only
         // place that knows every left-column button and its display name, so the
@@ -1048,7 +1394,7 @@ window.__ModuleLoader__.load({
           notify()
         }
 
-        ctx.effect(() => ctx.slots.subscribe('sidebar.panellist', syncPanels), 'dsh-sidebar-declutter: panel registry')
+        ctx.effect(() => ctx.slots.subscribe('sidebar.panellist', syncPanels), 'dsh-ui-hide: panel registry')
         const locale = (() => {
           try {
             return ctx.get('locale')
@@ -1057,10 +1403,10 @@ window.__ModuleLoader__.load({
           }
         })()
         if (locale !== null && typeof locale?.subscribe === 'function') {
-          ctx.effect(() => locale.subscribe(syncPanels), 'dsh-sidebar-declutter: panel labels')
+          ctx.effect(() => locale.subscribe(syncPanels), 'dsh-ui-hide: panel labels')
         }
         syncPanels()
-        ctx.effect(() => watchPanelRows(), 'dsh-sidebar-declutter: panel rows')
+        ctx.effect(() => watchPanelRows(), 'dsh-ui-hide: panel rows')
 
         ctx.effect(() => {
           registerTeardown(() => {
@@ -1069,7 +1415,7 @@ window.__ModuleLoader__.load({
           return () => {
             if (picker !== null) stopPicker()
           }
-        }, 'dsh-sidebar-declutter: pick teardown')
+        }, 'dsh-ui-hide: pick teardown')
 
         ctx.effect(() => {
           const tag = syncStyle()
@@ -1083,7 +1429,7 @@ window.__ModuleLoader__.load({
               if (document.querySelector('[class*="_panelList"]') === null) return
               if (document.querySelector('button[class*="_newSession"]') !== null) return
               console.warn(
-                '[dsh-sidebar-declutter] 侧栏已渲染但没匹配到新会话按钮，选择器可能随版本变化。',
+                '[dsh-ui-hide] 侧栏已渲染但没匹配到新会话按钮，选择器可能随版本变化。',
               )
             }, 2000)
           }
@@ -1092,7 +1438,7 @@ window.__ModuleLoader__.load({
             if (timer !== null) clearTimeout(timer)
             if (tag !== null) tag.remove()
           }
-        }, 'dsh-sidebar-declutter: stylesheet')
+        }, 'dsh-ui-hide: stylesheet')
 
 
         ctx.effect(() =>
@@ -1111,6 +1457,23 @@ window.__ModuleLoader__.load({
             ),
           )
         }
+
+        // Menu rows are plain DOM: sweep after every click that could have opened
+        // one, never with a body-level observer (the chat stream mutates per token).
+        ctx.effect(() => {
+          const sweep = (event) => {
+            const target = event && event.target
+            const fromRow = !!(target && target.closest && target.closest('[class*="_sessionRow"]'))
+            menuScheduleSweep(fromRow)
+          }
+          document.addEventListener('click', sweep, true)
+          document.addEventListener('contextmenu', sweep, true)
+          return () => {
+            document.removeEventListener('click', sweep, true)
+            document.removeEventListener('contextmenu', sweep, true)
+            menuStopWatch()
+          }
+        }, 'dsh-ui-hide: menu rows')
       },
     }
   },
