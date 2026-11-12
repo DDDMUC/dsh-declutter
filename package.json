@@ -1,5 +1,5 @@
 {
-  "name": "dsh-ui-hide",
+  "name": "dsh-sidebar-declutter",
   "version": "0.3.0",
   "description": "DSH 侧栏整理：隐藏冗余行、按 id 收起任意面板、面板列表排布三选一、点选元素加入勾选列表。纯样式注入，卸载即还原。",
   "type": "module",
@@ -45,10 +45,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/DDDMUC/dsh-ui-hide.git"
+    "url": "https://github.com/DDDMUC/dsh-sidebar-declutter.git"
   },
-  "homepage": "https://github.com/DDDMUC/dsh-ui-hide#readme",
+  "homepage": "https://github.com/DDDMUC/dsh-sidebar-declutter#readme",
   "bugs": {
-    "url": "https://github.com/DDDMUC/dsh-ui-hide/issues"
+    "url": "https://github.com/DDDMUC/dsh-sidebar-declutter/issues"
   }
 }

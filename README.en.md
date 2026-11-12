@@ -1,8 +1,8 @@
-# dsh-ui-hide
+# dsh-sidebar-declutter
 
 English | [中文](README.md)
 
-Declutters the DSH sidebar: hides the brand row, the New session button and the three “More” launchers behind individual switches, and lays the panel list out two per row (or packed by width). It injects stylesheets only — no source edits, no session data touched, and disabling or removing the bundle restores everything.
+Declutters the DSH interface: hides the brand row, the New session button and the three “More” launchers behind individual switches, lays the panel list out two per row (or packed by width), reorders panels by dragging, and hides any session-menu row you tick. It injects stylesheets and a few DOM attributes only — no source edits, no session data touched, and disabling or removing the bundle restores everything.
 
 ## Install
 
@@ -10,18 +10,19 @@ Open **Plugins → Add** in DSH and paste the package name or this repository:
 
 ```bash
 # npm (preferred)
-dsh plugin install dsh-ui-hide
+dsh plugin install dsh-sidebar-declutter
 
 # or straight from the repo
-dsh plugin install https://github.com/DDDMUC/dsh-ui-hide
+dsh plugin install https://github.com/DDDMUC/dsh-sidebar-declutter
 ```
 
-Then open **Plugins → Installed → dsh-ui-hide** and use the configure arrow on that bundle's row.
+Then open **Plugins → Installed → dsh-sidebar-declutter** and use the configure arrow on that bundle's row.
 
 ## Defaults
 
 - Hidden: the brand row, the New session button, the sidebar panel list's More, and the right column's More
-- Layout: two panels per row
+- Layout: two panels per row (drag the `⠿` grip in **Panels** to reorder; **Reset** restores the registration order)
+- Session menu: nothing hidden until you tick it
 - The Session header View row's `⋯` is **not** hidden by default
 
 ## What it targets
@@ -37,6 +38,26 @@ Each surface is rendered directly into the layout by a shipped package, so none 
 | View row More | `dsh-client-ui-conversation` | `_viewsMore` |
 
 Selectors key on CSS-module **local suffixes** (`_newSession`), never on the build-hashed prefix (`kB3qhq_`), because the prefix changes on every build while the local name follows the source.
+
+## Panel order
+
+Every row in the settings page's **Panels** block has a `⠿` grip: drag it onto another row to reorder. Clicking the row body still toggles the checkbox.
+
+- The order is stored as `panelOrder` (array of ids); panels never arranged keep their registration order behind it
+- It is applied as `data-dsh-panel` + `order`, so all three layout modes honour it
+- **Reset** clears `panelOrder` and restores the registration order
+- The More launcher always trails the panels
+
+## Session menu rows
+
+The **Session menu** block lists the rows of a Session's context menu; tick one to hide it, untick to bring it back.
+
+- The shipped rows are listed up front (rename / archive / unarchive / pin / unpin) — nothing has to be opened first
+- Anything else is discovered from a real menu open and appended under “community”
+- Rows are matched by label prefix (Chinese and English); rows carrying an accelerator also get an `[aria-keyshortcuts]` rule injected up front, so they never paint before being hidden
+- Sweeps only run within 400 ms of a click that came **from a Session row**, are grouped per menu, and that group must contain a shipped action — the system “open with” list is never read or recorded
+- Only `display:none`: no node removal, and no keyboard shortcut is touched
+- State lives in `localStorage["dsh-sidebar-declutter.menu"]`, tagged `version: 2`
 
 ## Layout modes
 

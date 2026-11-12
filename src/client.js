@@ -1,4 +1,4 @@
-// dsh-ui-hide — client half.
+// dsh-sidebar-declutter — client half.
 //
 // Each row is rendered straight into the layout by a shipped package, so none of
 // them is a slot registration and no config switch exists for any of them:
@@ -24,7 +24,7 @@
 // Settings live in localStorage rather than the loader Config: the entry needs no
 // Host schema, changes apply without a restart, and every surface reads one store.
 window.__ModuleLoader__.load({
-  id: 'dsh-ui-hide',
+  id: 'dsh-sidebar-declutter',
   factory: (require) => {
     const React = require('react')
     const h = React.createElement
@@ -36,11 +36,11 @@ window.__ModuleLoader__.load({
     const ENABLE_ROW_CONFIG = true
 
     /** Row-config key: `<bundle package>#<row id from the bundle patch>`. */
-    const ROW_CONFIG_KEY = 'dsh-ui-hide#hide-rows'
-    const STORE_KEY = 'dsh-ui-hide'
+    const ROW_CONFIG_KEY = 'dsh-sidebar-declutter#hide-rows'
+    const STORE_KEY = 'dsh-sidebar-declutter'
     /** Key this bundle stored its settings under before the rename. */
     const LEGACY_STORE_KEY = 'dsh-hide-new-session'
-    const STYLE_ATTR = 'data-dsh-ui-hide'
+    const STYLE_ATTR = 'data-dsh-sidebar-declutter'
 
     /**
      * The page groups its switches under headings; the flat `FIELDS` below is
@@ -183,7 +183,7 @@ window.__ModuleLoader__.load({
     // discovered from real menu opens (label + accelerator), so the page lists
     // what this build really renders. Nothing is hidden until it is ticked.
 
-    const MENU_STORE_KEY = 'dsh-ui-hide.menu'
+    const MENU_STORE_KEY = 'dsh-sidebar-declutter.menu'
     const MENU_STORE_VERSION = 2
     const MENU_HIDDEN_ATTR = 'data-dsd-menu-hidden'
 
@@ -604,7 +604,7 @@ window.__ModuleLoader__.load({
         tag.setAttribute(STYLE_ATTR, '1')
         document.head.appendChild(tag)
       }
-      const css = '/* dsh-ui-hide */\n'
+      const css = '/* dsh-sidebar-declutter */\n'
         + hiddenRules().concat(menuCssRules()).join('\n')
         + '\n' + FORM_CSS
       // The tag outlives the module instance: a newer build re-executing in the
@@ -732,7 +732,7 @@ window.__ModuleLoader__.load({
           if (row.getAttribute(PANEL_ATTR) !== id) row.setAttribute(PANEL_ATTR, id)
         }
       } catch (error) {
-        console.warn('[dsh-ui-hide] 面板打标失败：', error)
+        console.warn('[dsh-sidebar-declutter] 面板打标失败：', error)
       }
     }
 
@@ -847,7 +847,7 @@ window.__ModuleLoader__.load({
         return sel
       }
       for (const attr of Array.from(el.attributes)) {
-        if (attr.name.startsWith('data-') && attr.name !== 'data-dsh-ui-hide') {
+        if (attr.name.startsWith('data-') && attr.name !== 'data-dsh-sidebar-declutter') {
           return '[' + attr.name + ']'
         }
       }
@@ -1394,7 +1394,7 @@ window.__ModuleLoader__.load({
           notify()
         }
 
-        ctx.effect(() => ctx.slots.subscribe('sidebar.panellist', syncPanels), 'dsh-ui-hide: panel registry')
+        ctx.effect(() => ctx.slots.subscribe('sidebar.panellist', syncPanels), 'dsh-sidebar-declutter: panel registry')
         const locale = (() => {
           try {
             return ctx.get('locale')
@@ -1403,10 +1403,10 @@ window.__ModuleLoader__.load({
           }
         })()
         if (locale !== null && typeof locale?.subscribe === 'function') {
-          ctx.effect(() => locale.subscribe(syncPanels), 'dsh-ui-hide: panel labels')
+          ctx.effect(() => locale.subscribe(syncPanels), 'dsh-sidebar-declutter: panel labels')
         }
         syncPanels()
-        ctx.effect(() => watchPanelRows(), 'dsh-ui-hide: panel rows')
+        ctx.effect(() => watchPanelRows(), 'dsh-sidebar-declutter: panel rows')
 
         ctx.effect(() => {
           registerTeardown(() => {
@@ -1415,7 +1415,7 @@ window.__ModuleLoader__.load({
           return () => {
             if (picker !== null) stopPicker()
           }
-        }, 'dsh-ui-hide: pick teardown')
+        }, 'dsh-sidebar-declutter: pick teardown')
 
         ctx.effect(() => {
           const tag = syncStyle()
@@ -1429,7 +1429,7 @@ window.__ModuleLoader__.load({
               if (document.querySelector('[class*="_panelList"]') === null) return
               if (document.querySelector('button[class*="_newSession"]') !== null) return
               console.warn(
-                '[dsh-ui-hide] 侧栏已渲染但没匹配到新会话按钮，选择器可能随版本变化。',
+                '[dsh-sidebar-declutter] 侧栏已渲染但没匹配到新会话按钮，选择器可能随版本变化。',
               )
             }, 2000)
           }
@@ -1438,7 +1438,7 @@ window.__ModuleLoader__.load({
             if (timer !== null) clearTimeout(timer)
             if (tag !== null) tag.remove()
           }
-        }, 'dsh-ui-hide: stylesheet')
+        }, 'dsh-sidebar-declutter: stylesheet')
 
 
         ctx.effect(() =>
@@ -1473,7 +1473,7 @@ window.__ModuleLoader__.load({
             document.removeEventListener('contextmenu', sweep, true)
             menuStopWatch()
           }
-        }, 'dsh-ui-hide: menu rows')
+        }, 'dsh-sidebar-declutter: menu rows')
       },
     }
   },
