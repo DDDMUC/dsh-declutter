@@ -36,7 +36,38 @@ window.__ModuleLoader__.load({
     const ENABLE_ROW_CONFIG = true
 
     /** Row-config key: `<bundle package>#<row id from the bundle patch>`. */
-    const ROW_CONFIG_KEY = 'dsh-sidebar-declutter#hide-rows'
+    /** Sidebar entry that opens this plugin's settings page. */
+    const PANEL_ENTRY_LABEL = '隐藏与整理'
+    /** Panel id: the URL segment (#/panel/<id>) and the main slot key. */
+    const PANEL_ENTRY_ID = 'hide-rows'
+    /** The sidebar draws the row; this slot contributes the icon in front of it. */
+    function PanelEntry() {
+      return h(
+        'svg',
+        {
+          width: 16,
+          height: 16,
+          viewBox: '0 0 16 16',
+          fill: 'none',
+          'aria-hidden': 'true',
+        },
+        h('path', {
+          d: 'M1.8 8c1.6-2.5 3.8-3.9 6.2-3.9S12.6 5.5 14.2 8c-1.6 2.5-3.8 3.9-6.2 3.9S3.4 10.5 1.8 8Z',
+          stroke: 'currentColor',
+          strokeWidth: 1.3,
+          strokeLinejoin: 'round',
+        }),
+        h('circle', { cx: 8, cy: 8, r: 1.9, stroke: 'currentColor', strokeWidth: 1.3 }),
+        h('path', {
+          d: 'M3 13 13 3',
+          stroke: 'currentColor',
+          strokeWidth: 1.3,
+          strokeLinecap: 'round',
+        }),
+      )
+    }
+
+    const ROW_CONFIG_KEY = 'dsh-declutter#hide-rows'
     const STORE_KEY = 'dsh-sidebar-declutter'
     /** Key this bundle stored its settings under before the rename. */
     const LEGACY_STORE_KEY = 'dsh-hide-new-session'
@@ -52,11 +83,12 @@ window.__ModuleLoader__.load({
         kind: 'hide',
         title: '左栏',
         panels: true,
-        columns: 3,
+        columns: 4,
         fields: [
-          { key: 'brand', title: '顶部品牌行（deepseek HARNESS）' },
+          { key: 'brand', title: '顶部 logo' },
           { key: 'newSession', title: '「新会话」按钮' },
-          { key: 'sidebarMore', title: '左栏面板列表的「更多」' },
+          { key: 'sidebarMore', title: '「更多」按钮' },
+          { key: 'topGap', title: '顶部空隙' },
         ],
       },
       {
@@ -79,7 +111,9 @@ window.__ModuleLoader__.load({
             options: [
               { value: 'stack', title: '一列' },
               { value: 'two', title: '两列' },
+              { value: 'three', title: '三列' },
               { value: 'wrap', title: '自动紧凑' },
+              { value: 'icon', title: '图标显示' },
             ],
           },
         ],
@@ -426,6 +460,27 @@ window.__ModuleLoader__.load({
           // The collapsed rail keeps a normal row, or there is no way back out.
           '[class*="_root"][class*="_collapsed"] [class*="_logoRow"]'
             + '{height:28px!important;min-height:0!important;padding-block:0!important;align-items:center!important}',
+          // Newer builds put the collapse toggle in a 52px `topStrip` above the
+          // logo row, so hiding the row alone leaves that strip showing as a band
+          // of empty space. Drop it too: on Windows the toggle is fixed inside the
+          // title bar anyway, and the browser build re-parks it in the gutter.
+          '[class*="_root"]:not([class*="_collapsed"]) [class*="_topStrip"]'
+            + '{height:0!important;min-height:0!important;margin:0!important;padding:0!important'
+            + ';overflow:visible!important;border:0!important}',
+          'html:not([data-windows-titlebar]) [class*="_root"]:not([class*="_collapsed"])'
+            + ' [class*="_topStrip"] [class*="_toggle"]'
+            + '{position:fixed;top:6px;left:calc(var(--dsh-sidebar-width,280px) + 8px);z-index:30;border-radius:8px}',
+        )
+      }
+      // Tighten the 18px that the sidebar itself adds above the panel list:
+      // root padding (6), the scroll region's top margin (4) and the first grid
+      // row of the scroll area (8). The 40px above them belongs to the native
+      // window menu bar, so it is left alone.
+      if (values.topGap) {
+        rules.push(
+          '[class*="_root"]{padding-top:0!important}',
+          '[class*="_scrollRegion"]{margin-top:0!important}',
+          '[class*="_scrollArea"]{grid-template-rows:0 max-content 2px max-content!important}',
         )
       }
       if (values.newSession) {
@@ -441,6 +496,34 @@ window.__ModuleLoader__.load({
         rules.push(
           '[class*="_root"]:not([class*="_collapsed"]) [class*="_panelList"]'
             + '{display:grid!important;grid-template-columns:1fr 1fr;gap:2px}',
+        )
+      }
+      if (values.panelLayout === 'three') {
+        // Three fixed columns: same idea as the two-column grid, one more lane.
+        // Long labels keep the shipped ellipsis, and rows still line up.
+        rules.push(
+          '[class*="_root"]:not([class*="_collapsed"]) [class*="_panelList"]'
+            + '{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px}',
+          '[class*="_root"]:not([class*="_collapsed"]) [class*="_panelEntry"]'
+            + '{width:auto!important;min-width:0!important;max-width:100%}',
+          '[class*="_root"]:not([class*="_collapsed"]) [class*="_panelRow"]'
+            + '{padding-left:6px!important;padding-right:6px!important}',
+        )
+      }
+      if (values.panelLayout === 'icon') {
+        // Icons only: the label is dropped, rows shrink to their glyph, and the
+        // list packs them side by side. The unpin control is hidden too, or it
+        // would show up as a second glyph per entry.
+        rules.push(
+          '[class*="_root"]:not([class*="_collapsed"]) [class*="_panelList"]'
+            + '{flex-direction:row!important;flex-wrap:wrap!important;gap:4px!important}',
+          '[class*="_root"]:not([class*="_collapsed"]) [class*="_panelEntry"]'
+            + '{flex:0 0 auto!important;width:auto!important;min-width:0!important;max-width:100%}',
+          '[class*="_root"]:not([class*="_collapsed"]) [class*="_panelTitle"]{display:none!important}',
+          '[class*="_root"]:not([class*="_collapsed"]) [class*="_panelRow"]'
+            + '{width:auto!important;min-width:0!important;padding-left:8px!important;'
+            + 'padding-right:8px!important;justify-content:center!important;gap:0!important}',
+          '[class*="_root"]:not([class*="_collapsed"]) [class*="_panelUnpin"]{display:none!important}',
         )
       }
       if (values.panelLayout === 'wrap') {
@@ -466,7 +549,7 @@ window.__ModuleLoader__.load({
         // keeps trailing it. `!important` beats the wrap-mode rule above.
         const ordered = orderedPanelEntries()
         ordered.forEach((entry, index) => {
-          rules.push(`[${PANEL_ATTR}="${entry.id}"]{order:${index + 1}!important}`)
+          rules.push(`[class*="_panelEntry"]:has([${PANEL_ATTR}="${entry.id}"]){order:${index + 1}!important}`)
         })
         rules.push(
           '[class*="_root"]:not([class*="_collapsed"]) [class*="_panelList"]'
@@ -495,6 +578,7 @@ window.__ModuleLoader__.load({
         // The bulk layer only: every panel row plus the list's More launcher. The
         // individual switches and the checkbox list stay untouched.
         rules.push(
+          '[class*="_panelList"] [class*="_panelEntry"]{display:none!important}',
           '[class*="_panelList"] > button[aria-label]{display:none!important}',
           '[class*="_panelList"] [class*="_moreAnchor"]{display:none!important}',
           '[class*="_panelList"] button[aria-haspopup="menu"]{display:none!important}',
@@ -506,11 +590,18 @@ window.__ModuleLoader__.load({
         // Primary: the id stamped on the row, which keeps two same-named panels
         // apart. Fallback: the name, used only before the first stamping pass and
         // only when no other panel carries it.
-        rules.push('button[' + PANEL_ATTR + '="' + cssAttrValue(id) + '"]{display:none!important}')
+        // Newer builds wrap every row in a `_panelEntry` box; hiding only the
+        // button leaves that box occupying its grid cell, which is the empty slot
+        // seen when a two-column list loses one panel. Hide the box itself.
+        rules.push(
+          '[class*="_panelEntry"]:has(button[' + PANEL_ATTR + '="' + cssAttrValue(id) + '"])'
+            + '{display:none!important}',
+          'button[' + PANEL_ATTR + '="' + cssAttrValue(id) + '"]{display:none!important}',
+        )
         const shared = panelEntries.some((one) => one.id !== id && one.label === entry.label)
         if (!shared) {
           rules.push(
-            '[class*="_panelList"] > button[aria-label="' + cssAttrValue(entry.label) + '"]'
+            '[class*="_panelEntry"]:has(button[aria-label="' + cssAttrValue(entry.label) + '"])'
               + '{display:none!important}',
           )
         }
@@ -534,6 +625,7 @@ window.__ModuleLoader__.load({
       '.dhns-rows{display:flex;flex-direction:column;gap:8px}',
       '.dhns-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}',
       '.dhns-grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}',
+      '.dhns-grid-4{grid-template-columns:repeat(4,minmax(0,1fr))}',
       '.dhns-grid .dhns-row{padding:6px 8px;align-items:center;border-radius:6px}',
       '.dhns-grid .dhns-title{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.dhns-grid .dhns-hint{font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
@@ -594,6 +686,8 @@ window.__ModuleLoader__.load({
       'background:transparent;color:var(--dsw-alias-label-secondary)}',
       '.dhns-subheadBtn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}',
       '.dhns-subheadBtn:disabled{opacity:.4;cursor:default}',
+      '.dhns-page{padding:24px 28px;max-width:820px}',
+      '.dhns-pageTitle{margin:0 0 16px;font-size:16px;font-weight:600}',
     ].join('')
 
     function syncStyle() {
@@ -714,7 +808,7 @@ window.__ModuleLoader__.load({
       try {
         const nav = findPanelNav()
         if (nav === null) return
-        const rows = Array.from(nav.querySelectorAll(':scope > button[aria-label]'))
+        const rows = Array.from(nav.querySelectorAll('button[aria-label]'))
         if (rows.length === 0) return
         const claimed = new Set()
         const take = (label) => {
@@ -1026,6 +1120,16 @@ window.__ModuleLoader__.load({
      * row. `summary` is the one-liner the row shows when collapsed; `page` is the
      * form the row's configure control opens.
      */
+    /** The page #/panel/hide-rows renders: the same form as the plugin row card. */
+    function SettingsPage() {
+      return h(
+        'div',
+        { className: 'dhns-page' },
+        h('h2', { className: 'dhns-pageTitle' }, PANEL_ENTRY_LABEL),
+        h(SettingsCard, { view: 'full' }),
+      )
+    }
+
     function SettingsCard(props) {
       const view = props?.view
       const [, forceRender] = React.useReducer((count) => count + 1, 0)
@@ -1321,7 +1425,7 @@ window.__ModuleLoader__.load({
             MENU_PRESETS.map((one) => rowOf({ key: one.key, accel: one.accel }))),
           other.length === 0
             ? null
-            : h('div', { className: 'dhns-subhead', key: 'other' }, '社区（插件添加）'),
+            : h('div', { className: 'dhns-subhead', key: 'other' }, '社区'),
           other.length === 0
             ? null
             : h('div', { className: 'dhns-grid', key: 'other-grid' }, other.map(rowOf)),
@@ -1352,7 +1456,9 @@ window.__ModuleLoader__.load({
                       ? 'dhns-grid dhns-grid-2'
                       : section.columns === 3
                         ? 'dhns-grid'
-                        : 'dhns-rows',
+                        : section.columns === 4
+                          ? 'dhns-grid dhns-grid-4'
+                          : 'dhns-rows',
                   },
                   section.fields.map(renderField),
                 ),
@@ -1449,6 +1555,31 @@ window.__ModuleLoader__.load({
             ),
           ),
         )
+
+        // Same two-slot pattern the shipped panels use: the sidebar row only
+        // carries the icon and label, and the main slot with the same key is the
+        // page the shell routes #/panel/<id> to. Without the second registration
+        // the click falls back to whatever panel was open before.
+        if (ctx.slots && typeof ctx.slots.inject === 'function') {
+          ctx.effect(() =>
+            ctx.slots.inject('sidebar.panellist', () =>
+              ctx.slots.register(
+                {
+                  name: 'sidebar.panellist',
+                  id: PANEL_ENTRY_ID,
+                  order: 20,
+                  label: () => PANEL_ENTRY_LABEL,
+                },
+                PanelEntry,
+              ),
+            ),
+          )
+          ctx.effect(() =>
+            ctx.slots.inject('main', () =>
+              ctx.slots.register({ name: 'main', key: PANEL_ENTRY_ID }, SettingsPage),
+            ),
+          )
+        }
 
         if (ENABLE_ROW_CONFIG) {
           ctx.effect(() =>
