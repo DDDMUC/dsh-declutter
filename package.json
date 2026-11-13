@@ -1,6 +1,6 @@
 {
-  "name": "dsh-declutter",
-  "version": "0.3.0",
+  "name": "dsh-sidebar-declutter",
+  "version": "0.3.3",
   "type": "module",
   "main": "src/index.js",
   "exports": {

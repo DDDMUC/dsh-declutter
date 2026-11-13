@@ -67,7 +67,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    const ROW_CONFIG_KEY = 'dsh-declutter#hide-rows'
+    const ROW_CONFIG_KEY = 'dsh-sidebar-declutter#hide-rows'
     const STORE_KEY = 'dsh-sidebar-declutter'
     /** Key this bundle stored its settings under before the rename. */
     const LEGACY_STORE_KEY = 'dsh-hide-new-session'
@@ -233,7 +233,19 @@ window.__ModuleLoader__.load({
       { key: '取消归档', accel: '', rule: /^(取消归档|Unarchive)/, aria: [] },
       { key: '置顶会话', accel: '', rule: /^(置顶会话|Pin)/, aria: [] },
       { key: '取消置顶', accel: '', rule: /^(取消置顶|Unpin)/, aria: [] },
+      // Also shipped by the product: menu.fork / menu.sessionId / menu.openIn
+      // in the shell's own locale. They used to fall through to discovery and
+      // were mislabelled as community rows.
+      { key: '分叉会话', accel: 'Alt+Meta+F', rule: /^(分叉会话|Fork)/, aria: ['Alt+Meta+F'] },
+      { key: '复制 Session ID', accel: '', rule: /^(复制 Session ID|Copy Session ID)/, aria: [] },
+      { key: '在应用中打开', accel: '', rule: /^(在应用中打开|Open in App)/, aria: [] },
     ]
+
+    /** Fold a stored/discovered label onto its official key when it matches. */
+    function canonicalMenuKey(key) {
+      const preset = MENU_PRESETS.find((one) => one.rule.test(key))
+      return preset === undefined ? key : preset.key
+    }
 
     /**
      * Rows that carry an accelerator can be hidden by CSS, before the menu is ever
@@ -258,12 +270,17 @@ window.__ModuleLoader__.load({
         const parsed = JSON.parse(localStorage.getItem(MENU_STORE_KEY) || 'null')
         if (!parsed) return
         const hidden = Array.isArray(parsed.hidden)
-          ? parsed.hidden.filter((one) => typeof one === 'string')
+          ? [...new Set(parsed.hidden.filter((one) => typeof one === 'string').map(canonicalMenuKey))]
           : []
         // v1 recorded rows from every menu on the desktop — including the system
         // "open with" list — so its `seen` is thrown away, keeping the switches.
         const seen = parsed.version === MENU_STORE_VERSION && Array.isArray(parsed.seen)
-          ? parsed.seen.filter((one) => one && typeof one.key === 'string')
+          ? parsed.seen
+              .filter((one) => one && typeof one.key === 'string')
+              .reduce((list, one) => {
+                const key = canonicalMenuKey(one.key)
+                return list.some((entry) => entry.key === key) ? list : [...list, { ...one, key }]
+              }, [])
           : []
         menuState = { hidden, seen }
         if (parsed.version !== MENU_STORE_VERSION) writeMenuState()
@@ -346,7 +363,26 @@ window.__ModuleLoader__.load({
     let menuSweepQueued = false
 
     /** Coalesce a burst of mutations into one sweep, before the next paint. */
-    function menuQueueSweep() {
+    function menuQueueSweep(records) {
+      // The 400ms watch overlaps the chat stream. Only a mutation that actually
+      // mounted a menu node deserves a document-wide sweep; per-token text and
+      // message-row updates do not. The timed sweeps below still cover menus
+      // that mount without adding a role-bearing node.
+      if (records && records.length) {
+        let menuish = false
+        for (const rec of records) {
+          for (const node of rec.addedNodes || []) {
+            if (node.nodeType !== 1) continue
+            if (node.matches?.('[role="menu"],[role="menuitem"]') ||
+                node.querySelector?.('[role="menu"],[role="menuitem"]')) {
+              menuish = true
+              break
+            }
+          }
+          if (menuish) break
+        }
+        if (!menuish) return
+      }
       if (menuSweepQueued) return
       menuSweepQueued = true
       const run = () => {
@@ -382,6 +418,11 @@ window.__ModuleLoader__.load({
 
     /** Menus mount a frame or two after the click that opens them. */
     function menuScheduleSweep(fromSessionRow) {
+      // A click that cannot open a session menu and has no hidden rows to
+      // enforce makes menuSweep() a no-op: added stays false and every item
+      // hits the hidden guard. Skip the four document-wide scans, the 400ms
+      // watch and all timers -- this is the hot path on every ordinary click.
+      if (!fromSessionRow && !menuFromSessionRow && menuState.hidden.length === 0) return
       if (fromSessionRow) menuFromSessionRow = true
       menuSweep()
       menuWatchForMount()
@@ -433,55 +474,95 @@ window.__ModuleLoader__.load({
 
     function hiddenRules() {
       const rules = []
+      /**
+       * Platform split. The desktop shell marks <html data-platform>: darwin on
+       * macOS, win32 on Windows; a plain browser carries no marker at all (see
+       * the shell's own macDesktopWindow / dsh-power-menu-mac). Linux desktop is
+       * neither darwin nor a browser and stays on the generic branch. macOS is
+       * the only build with native traffic lights floating over the sidebar and
+       * no in-page title bar strip.
+       */
+      const isMacDesktop = () =>
+        typeof document !== 'undefined' &&
+        document.documentElement?.getAttribute('data-platform') === 'darwin'
       if (values.brand) {
-        // The logo row is a flex child of the column, so dropping it closes the
-        // gap. It holds the collapse toggle on Windows and Linux, though, and that
-        // toggle must survive: hide the whole row only where it has no toggle, and
-        // otherwise hide just the brand inside it. `data-sidebar-toggle` is the
-        // sidebar's own attribute, stabler than any CSS-module class name.
-        rules.push(
-          '[class*="_logoRow"]:not(:has([data-sidebar-toggle])){display:none!important}',
-          '[class*="_logoRow"]:has([data-sidebar-toggle]) [class*="_brand"]{display:none!important}',
-          // Where the row does hold the toggle, drop its height instead of the
-          // row: zero height, no padding, and the button keeps the same place,
-          // drawn on top of whatever now starts where the row used to be. Pure
-          // CSS — no probe, no timer, no forced layout.
-          '[class*="_root"]:not([class*="_collapsed"]) [class*="_logoRow"]:has([data-sidebar-toggle])'
-            + '{height:0!important;min-height:0!important;padding:0!important;overflow:visible!important'
-            + ';align-items:flex-start!important;justify-content:flex-end!important}',
-          // Web only: a shell that draws a Windows title bar already pins this
-          // button up there (`[data-windows-titlebar] .toggle{position:fixed;
-          // left:12px}`), and this selector is more specific, so it has to stay
-          // out of that layout entirely. In the browser there is no title bar,
-          // and the button belongs in the gutter just right of the sidebar.
-          'html:not([data-windows-titlebar]) [class*="_root"]:not([class*="_collapsed"])'
-            + ' [class*="_logoRow"]:has([data-sidebar-toggle]) [class*="_toggle"]'
-            + '{position:fixed;top:6px;left:calc(var(--dsh-sidebar-width,280px) + 8px);z-index:30;border-radius:8px}',
-          // The collapsed rail keeps a normal row, or there is no way back out.
-          '[class*="_root"][class*="_collapsed"] [class*="_logoRow"]'
-            + '{height:28px!important;min-height:0!important;padding-block:0!important;align-items:center!important}',
-          // Newer builds put the collapse toggle in a 52px `topStrip` above the
-          // logo row, so hiding the row alone leaves that strip showing as a band
-          // of empty space. Drop it too: on Windows the toggle is fixed inside the
-          // title bar anyway, and the browser build re-parks it in the gutter.
-          '[class*="_root"]:not([class*="_collapsed"]) [class*="_topStrip"]'
-            + '{height:0!important;min-height:0!important;margin:0!important;padding:0!important'
-            + ';overflow:visible!important;border:0!important}',
-          'html:not([data-windows-titlebar]) [class*="_root"]:not([class*="_collapsed"])'
-            + ' [class*="_topStrip"] [class*="_toggle"]'
-            + '{position:fixed;top:6px;left:calc(var(--dsh-sidebar-width,280px) + 8px);z-index:30;border-radius:8px}',
-        )
+        if (isMacDesktop()) {
+          // macOS has native traffic lights and no in-page title bar: the
+          // _topStrip is the only thing keeping sidebar content below them.
+          // Collapse the _logoRow (that is the space we reclaim) but leave the
+          // strip alone -- dropping both, as the Windows/browser branch does,
+          // is what pulled "New session" into the traffic lights. No global
+          // padding fallback here: [class*="_root"] is reused by many shell
+          // components and padding every one of them tears the column apart.
+          rules.push(
+            '[class*="_logoRow"] [class*="_brand"]{display:none!important}',
+            '[class*="_topStrip"] [class*="_brand"]{display:none!important}',
+            '[class*="_root"]:not([class*="_collapsed"]) [class*="_logoRow"]:not(:has([data-sidebar-toggle]))'
+              + '{display:none!important}',
+            '[class*="_root"]:not([class*="_collapsed"]) [class*="_logoRow"]:has([data-sidebar-toggle])'
+              + '{height:0!important;min-height:0!important;padding:0!important;overflow:visible!important}',
+          )
+        } else {
+          // The logo row is a flex child of the column, so dropping it closes the
+          // gap. It holds the collapse toggle on Windows and Linux, though, and that
+          // toggle must survive: hide the whole row only where it has no toggle, and
+          // otherwise hide just the brand inside it. `data-sidebar-toggle` is the
+          // sidebar's own attribute, stabler than any CSS-module class name.
+          rules.push(
+            '[class*="_logoRow"]:not(:has([data-sidebar-toggle])){display:none!important}',
+            '[class*="_logoRow"]:has([data-sidebar-toggle]) [class*="_brand"]{display:none!important}',
+            // Where the row does hold the toggle, drop its height instead of the
+            // row: zero height, no padding, and the button keeps the same place,
+            // drawn on top of whatever now starts where the row used to be. Pure
+            // CSS — no probe, no timer, no forced layout.
+            '[class*="_root"]:not([class*="_collapsed"]) [class*="_logoRow"]:has([data-sidebar-toggle])'
+              + '{height:0!important;min-height:0!important;padding:0!important;overflow:visible!important'
+              + ';align-items:flex-start!important;justify-content:flex-end!important}',
+            // Never macOS: its native traffic lights sit over the sidebar, so
+            // the toggle must stay in the shell's own layout. Shells that draw
+            // a Windows title bar are excluded by the first guard; everything
+            // else keeps the gutter behaviour.
+            'html:not([data-windows-titlebar]):not([data-platform="darwin"]) [class*="_root"]:not([class*="_collapsed"])'
+              + ' [class*="_logoRow"]:has([data-sidebar-toggle]) [class*="_toggle"]'
+              + '{position:fixed;top:6px;left:calc(var(--dsh-sidebar-width,280px) + 8px);z-index:30;border-radius:8px}',
+            // The collapsed rail keeps a normal row, or there is no way back out.
+            '[class*="_root"][class*="_collapsed"] [class*="_logoRow"]'
+              + '{height:28px!important;min-height:0!important;padding-block:0!important;align-items:center!important}',
+            // Newer builds put the collapse toggle in a 52px `topStrip` above the
+            // logo row, so hiding the row alone leaves that strip showing as a band
+            // of empty space. Drop it too: on Windows the toggle is fixed inside the
+            // title bar anyway, and the browser build re-parks it in the gutter.
+            '[class*="_root"]:not([class*="_collapsed"]) [class*="_topStrip"]'
+              + '{height:0!important;min-height:0!important;margin:0!important;padding:0!important'
+              + ';overflow:visible!important;border:0!important}',
+            'html:not([data-windows-titlebar]):not([data-platform="darwin"]) [class*="_root"]:not([class*="_collapsed"])'
+              + ' [class*="_topStrip"] [class*="_toggle"]'
+              + '{position:fixed;top:6px;left:calc(var(--dsh-sidebar-width,280px) + 8px);z-index:30;border-radius:8px}',
+          )
+        }
       }
-      // Tighten the 18px that the sidebar itself adds above the panel list:
-      // root padding (6), the scroll region's top margin (4) and the first grid
-      // row of the scroll area (8). The 40px above them belongs to the native
-      // window menu bar, so it is left alone.
+      // 顶部空隙: ONE checkbox on all three platforms, different behaviour.
+      // Windows / web keep the original three rules verbatim. On macOS the
+      // topStrip is 52px tall with a 28px toggle centred in it, so its lower
+      // part is empty: shrink it to 38px (reclaim 14px) and keep the toggle
+      // 11px from the top -- the same offset centring gave it -- so the button
+      // stays at exactly the same screen position while everything below moves
+      // up 14px. Zeroing _root padding is never done on macOS: that would
+      // shove the toggle into the native traffic lights.
       if (values.topGap) {
-        rules.push(
-          '[class*="_root"]{padding-top:0!important}',
-          '[class*="_scrollRegion"]{margin-top:0!important}',
-          '[class*="_scrollArea"]{grid-template-rows:0 max-content 2px max-content!important}',
-        )
+        if (isMacDesktop()) {
+          rules.push(
+            '[class*="_root"]:not([class*="_collapsed"]) [class*="_topStrip"]'
+              + '{height:38px!important;min-height:38px!important;align-items:flex-start!important'
+              + ';padding-top:11px!important;padding-bottom:0!important;box-sizing:border-box!important}',
+          )
+        } else {
+          rules.push(
+            '[class*="_root"]{padding-top:0!important}',
+            '[class*="_scrollRegion"]{margin-top:0!important}',
+            '[class*="_scrollArea"]{grid-template-rows:0 max-content 2px max-content!important}',
+          )
+        }
       }
       if (values.newSession) {
         rules.push('button[class*="_newSession"]{display:none!important}')
@@ -1136,13 +1217,10 @@ window.__ModuleLoader__.load({
       const [dragId, setDragId] = React.useState(null)
       React.useEffect(() => subscribe(forceRender), [])
 
-      if (view === 'summary') {
-        // Only the hide section belongs in the one-liner; the layout switch is
-        // not something the row can meaningfully report as "hidden".
-        const on = FIELDS.filter((field) => field.kind === 'hide' && values[field.key] === true)
-          .map((field) => field.title)
-        return h('span', null, on.length === 0 ? '未隐藏任何项' : '已隐藏：' + on.join('、'))
-      }
+      // The host renders this card with view="summary" as the one-line
+      // description under the plugin row. Return nothing so no description
+      // is drawn at all; the full form is unchanged.
+      if (view === 'summary') return null
 
       const rowFor = (field) =>
         h(
@@ -1355,7 +1433,7 @@ window.__ModuleLoader__.load({
                 ),
           ),
           values.picked.length === 0
-            ? h('p', { className: 'dhns-hint', key: 'empty' }, '还没有点选任何元素。')
+            ? null
             : h(
                 'div',
                 { className: 'dhns-rows', key: 'list' },
