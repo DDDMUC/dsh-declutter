@@ -1,54 +1,53 @@
 {
   "name": "dsh-declutter",
-  "version": "0.1.3",
+  "version": "0.2.0",
+  "description": "DSH 界面收纳插件：把已经失败却后来成功的轮次、空轮、编辑产生的合成轮收起来——只改视图属性，完全可逆，绝不改会话日志；规则表化 + 逐条自检。",
   "type": "module",
   "main": "src/index.js",
   "exports": {
     ".": "./src/index.js",
     "./client": "./src/client.js",
-    "./locale/*.json": "./locale/*.json",
-    "./icon": "./icon.svg",
+    "./rules": "./src/logic.js",
     "./package.json": "./package.json"
   },
   "files": [
     "src",
     "cordis.patch.yml",
-    "locale/*.json",
     "icon.svg",
+    "locale",
     "README.md",
-    "README.en.md",
     "LICENSE"
   ],
   "keywords": [
     "deepseek-harness",
     "dsh",
     "dsh-plugin",
-    "sidebar"
+    "declutter",
+    "view",
+    "rule-table"
   ],
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\""
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
     },
     "client": {
       "platform": "web",
-      "immediately": true,
       "inject": [
-        "@deepseek-ai/dsh-client-ui-sidebar"
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-chat",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-trajectory"
       ]
+    },
+    "engines": {
+      "dsh": ">=0.1.6-alpha.2"
     }
-  },
-  "author": {
-    "name": "DDDMUC",
-    "email": "175344510+DDDMUC@users.noreply.github.com"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/DDDMUC/dsh-declutter.git"
-  },
-  "homepage": "https://github.com/DDDMUC/dsh-declutter#readme",
-  "bugs": {
-    "url": "https://github.com/DDDMUC/dsh-declutter/issues"
-  },
-  "description": "隐藏侧栏与会话菜单行，按 id 管理面板，可拖动排序。纯样式注入，卸载即还原。"
+  }
 }
