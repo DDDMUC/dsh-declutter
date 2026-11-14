@@ -1,6 +1,6 @@
 {
   "name": "dsh-declutter",
-  "version": "0.3.0",
+  "version": "0.1.2",
   "type": "module",
   "main": "src/index.js",
   "exports": {
@@ -44,10 +44,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/DDDMUC/dsh-sidebar-declutter.git"
+    "url": "https://github.com/DDDMUC/dsh-declutter.git"
   },
-  "homepage": "https://github.com/DDDMUC/dsh-sidebar-declutter#readme",
+  "homepage": "https://github.com/DDDMUC/dsh-declutter#readme",
   "bugs": {
-    "url": "https://github.com/DDDMUC/dsh-sidebar-declutter/issues"
-  }
+    "url": "https://github.com/DDDMUC/dsh-declutter/issues"
+  },
+  "description": "隐藏侧栏与会话菜单行，按 id 管理面板，可拖动排序。纯样式注入，卸载即还原。"
 }
