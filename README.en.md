@@ -1,4 +1,4 @@
-# dsh-sidebar-declutter
+# dsh-declutter
 
 English | [中文](README.md)
 
@@ -10,13 +10,13 @@ Open **Plugins → Add** in DSH and paste the package name or this repository:
 
 ```bash
 # npm (preferred)
-dsh plugin install dsh-sidebar-declutter
+dsh plugin install dsh-declutter
 
 # or straight from the repo
-dsh plugin install https://github.com/DDDMUC/dsh-sidebar-declutter
+dsh plugin install https://github.com/DDDMUC/dsh-declutter
 ```
 
-Then open **Plugins → Installed → dsh-sidebar-declutter** and use the configure arrow on that bundle's row.
+Then open **Plugins → Installed → dsh-declutter** and use the configure arrow on that bundle's row.
 
 ## Defaults
 
@@ -57,7 +57,7 @@ The **Session menu** block lists the rows of a Session's context menu; tick one 
 - Rows are matched by label prefix (Chinese and English); rows carrying an accelerator also get an `[aria-keyshortcuts]` rule injected up front, so they never paint before being hidden
 - Sweeps only run within 400 ms of a click that came **from a Session row**, are grouped per menu, and that group must contain a shipped action — the system “open with” list is never read or recorded
 - Only `display:none`: no node removal, and no keyboard shortcut is touched
-- State lives in `localStorage["dsh-sidebar-declutter.menu"]`, tagged `version: 2`
+- State lives in `localStorage["dsh-declutter.menu"]`, tagged `version: 2`
 
 ## Layout modes
 

@@ -67,7 +67,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    const ROW_CONFIG_KEY = 'dsh-sidebar-declutter#hide-rows'
+    const ROW_CONFIG_KEY = 'dsh-declutter#hide-rows'
     const STORE_KEY = 'dsh-sidebar-declutter'
     /** Key this bundle stored its settings under before the rename. */
     const LEGACY_STORE_KEY = 'dsh-hide-new-session'
