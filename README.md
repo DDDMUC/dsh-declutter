@@ -2,7 +2,9 @@
 
 **DSH 界面「收纳」插件 —— 把平台画出来、但你不想读的部分收起来。** 它不删除任何东西，不改会话日志：每一次动作都是平台自己节点上的一个属性，完全可逆；而每一条"决定动手"的规则都是同一张表里的一行，各自带自检。收起的是**读起来的样子**，不是**发生过的事实**。
 
-它专门治三种"看着像真的、其实误导"的行：**已经失败但后来成功的轮次**（同一件事留下了两条互相矛盾的记录）、**开了却什么都没发生的空轮**、**编辑旧回答产生的合成轮**（看起来像模型自己又答了一遍）。每条规则都能按 id 单独关掉或改参数，不用改代码。
+另一半是**侧栏整理**：隐藏侧栏的品牌行、按钮，管理面板显隐与排序，并按需藏起会话菜单里的条目——详见下面的「侧栏整理」。
+
+先说视图这一半。它专门治三种"看着像真的、其实误导"的行：**已经失败但后来成功的轮次**（同一件事留下了两条互相矛盾的记录）、**开了却什么都没发生的空轮**、**编辑旧回答产生的合成轮**（看起来像模型自己又答了一遍）。每条规则都能按 id 单独关掉或改参数，不用改代码。
 
 [中文](#中文) · [English](#english)
 
@@ -24,6 +26,29 @@ dsh plugin --profile web add dsh-declutter
 ```sh
 dsh plugin --profile web add "link:/path/to/dsh-declutter"
 ```
+
+### 侧栏整理
+
+左栏和会话菜单都由同一个设置页管理，入口有两处：左侧面板列表里的 **「隐藏与整理」**，或者 **插件 → 已安装 → dsh-declutter → 该行的配置箭头**。
+
+| 开关 | 管什么 |
+|---|---|
+| 顶部 logo | 侧栏最上面那行品牌行 |
+| 「新会话」按钮 | 侧栏的新建入口 |
+| 「更多」按钮 | 面板列表的「更多」菜单 |
+| 顶部空隙 | 侧栏自己加的 18px（6 + 4 + 8）；窗口标题栏那 40px 不动 |
+| 面板 | 逐个勾选隐藏；按住 `⠿` 手柄拖动排序，「还原默认」恢复注册顺序 |
+| 排布 | 一列 / 两列 / 三列 / 自动紧凑 / 图标显示（只留图标） |
+| 会话菜单 | 勾上即隐藏：官方五条（重命名、归档会话、取消归档、置顶会话、取消置顶）预置，其余条目打开一次菜单后自动发现 |
+| 自由隐藏 | 点「开始点选」再点界面上任意元素，它成为一个条目，勾上才隐藏 |
+
+三条实现约束，决定了它为什么稳：
+
+- **隐藏作用在整条面板行上**（`_panelEntry`），不是只藏里面的按钮——所以删掉一个面板不会留下空格子。
+- **会话菜单只处理从会话行发起的菜单**，并按菜单分组、要求该组含官方动作；系统「打开方式」那类列表不会被读取，也不会被记录。
+- **带快捷键的行额外注入一条 `[aria-keyshortcuts]` 规则**，在菜单画出来之前就已经不显示，不会闪一下。
+
+偏好存在浏览器 `localStorage`，键名沿用改名前的老值（`dsh-sidebar-declutter`），所以升级不会丢开关。
 
 ### 第一条原则
 
@@ -184,6 +209,29 @@ that the platform drew but the user does not want to read.
 It does not delete anything. It does not edit the session log. Every action is an
 attribute on a node the platform owns, fully reversible, and every rule that
 decides to act is a row in one table with its own self-check.
+
+## Sidebar tidy
+
+The left column and the session menu share one settings page. Two ways in: the **Hide & tidy** entry in the panel list, or **Plugins → Installed → dsh-declutter →** the row's configure arrow.
+
+| Switch | What it governs |
+|---|---|
+| Top logo | the brand row at the top of the sidebar |
+| New session button | the sidebar's create entry |
+| More button | the panel list's overflow menu |
+| Top gap | the 18px the sidebar adds itself (6 + 4 + 8); the 40px window title bar is untouched |
+| Panels | tick to hide one; drag the `⠿` grip to reorder; Reset restores registration order |
+| Layout | one / two / three columns, packed-by-width, or icons only |
+| Session menu | tick to hide a row: the five shipped rows are listed up front, the rest are discovered from a real menu open |
+| Free hide | pick any element on screen, tick it in the list to hide it |
+
+Three constraints that keep it honest:
+
+- Hiding acts on the whole panel row (`_panelEntry`), not just the button inside it, so no empty cell is left behind.
+- The session-menu sweep only runs for menus opened from a Session row, is grouped per menu, and that group must contain a shipped action — the system "open with" list is never read or recorded.
+- Rows carrying an accelerator also get an `[aria-keyshortcuts]` rule injected up front, so they are gone before the menu paints.
+
+Preferences live in `localStorage` under the pre-rename key (`dsh-sidebar-declutter`), so upgrading does not lose your switches.
 
 ## The first principle
 
