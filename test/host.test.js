@@ -97,17 +97,36 @@ test('a malformed session id is rejected as 400, not 404', async () => {
   const res = await call(routes, '/dsh-declutter/state', {
     url: '/dsh-declutter/state?sessionId=not-a-session',
   })
-  assert.equal(res.statusCode, 400)
-  assert.equal(res.body.code, 'invalid')
+  // `not-a-session` is a perfectly legal id now; only ids that could leave a
+  // path or a URL are refused.
+  assert.equal(res.statusCode, 200, 'a dashed id is legal')
+  const bad = await call(routes, '/dsh-declutter/state', {
+    url: '/dsh-declutter/state?sessionId=' + encodeURIComponent('../etc/passwd'),
+  })
+  assert.equal(bad.statusCode, 400)
+  assert.equal(bad.body.code, 'invalid')
 })
 
-test('an unknown session is 404', async () => {
+test('a legal id with no log is an empty state, and a named id is legal', async () => {
   const routes = mount({ events: null })
   const res = await call(routes, '/dsh-declutter/state', {
     url: '/dsh-declutter/state?sessionId=' + SESSION,
   })
-  assert.equal(res.statusCode, 404)
-  assert.equal(res.body.code, 'session-not-found')
+  // No log yet is an EMPTY session, not a failure: the panel loads its rule
+  // table and shows no verdicts instead of "状态加载失败，稍后重试。".
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body.ok, true)
+  assert.deepEqual(res.body.rules, [])
+  assert.equal(res.body.events, 0)
+  assert.equal(res.body.live, false)
+  assert.ok(res.body.ruleTable, 'the rule table still travels')
+
+  // A NAMED session is a session: DSH ids are opaque (`z.string().min(1)`), and
+  // the GUI creates ids like this one.
+  const named = await call(routes, '/dsh-declutter/state', {
+    url: '/dsh-declutter/state?sessionId=bili-whale',
+  })
+  assert.equal(named.statusCode, 200, 'a named session id is well formed')
 })
 
 // --- the self-check ----------------------------------------------------------

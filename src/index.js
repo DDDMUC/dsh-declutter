@@ -52,7 +52,16 @@ export const name = PLUGIN_ID
 export const version = VERSION
 
 const ROUTE_PREFIX = '/dsh-declutter'
-const SESSION_ID_RE = /^(session-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+// A session id is an OPAQUE string to DSH: the host's own schema is
+// `z.string().min(1)`, and a named session created in the GUI (`bili-whale`,
+// stored as ~/.dsh/storages/<profile>/sessions/bili-whale.json) is exactly as
+// real as a UUID one. A UUID-only test rejected those with a 400 - the panel
+// then answered "状态加载失败" for a session that plainly exists, and a session
+// list filtered by it hid them. The character class still refuses everything
+// that could leave a path or a URL: `/`, `\`, `..` (the first character must be
+// alphanumeric, so a leading dot is already out), whitespace and control
+// characters.
+const SESSION_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 
 /** How many sessions' worth of view-side reports to retain. */
 const REPORT_CAPACITY = 64
@@ -171,7 +180,29 @@ function createReportStore() {
  */
 async function stateOf(ctx, sessionId, reports, resolved) {
   const events = await readEvents(ctx, sessionId)
-  if (!events) throw new HttpError(404, 'session-not-found', 'no session log for this id')
+  if (!events) {
+    // A named session with nothing in it yet is an EMPTY session, not a failed
+    // one: the panel still loads its rule table and shows no verdicts, and the
+    // next refresh picks the log up once it exists. Answering 404 here is what
+    // the panel printed as "状态加载失败，稍后重试。".
+    const empty = reports.get(sessionId)
+    const reportedAtEmpty = Object.values(empty ?? {}).reduce(
+      (latest, entry) => (entry && typeof entry.at === 'number' && (latest === null || entry.at > latest) ? entry.at : latest),
+      null,
+    )
+    return {
+      plugin: PLUGIN_ID,
+      version: VERSION,
+      sessionId,
+      live: false,
+      events: 0,
+      ruleTable: ruleTable(),
+      verdicts: { alarm: [], broken: [], quiet: [], off: [], hostOnly: [] },
+      rules: [],
+      reportedAt: reportedAtEmpty,
+      unknownRuleConfig: resolved.unknown,
+    }
+  }
   const report = reports.get(sessionId)
   const rules = runRules(events, resolved, report)
   return {
