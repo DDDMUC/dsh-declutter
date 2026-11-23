@@ -24,6 +24,10 @@ function mount(options = {}) {
     },
   }
   const events = options.events === undefined ? sameTurnRecovered : options.events
+  const readSession =
+    options.readSession === undefined
+      ? async () => (events === null ? null : { events })
+      : options.readSession
   const ctx = {
     effect: (fn) => {
       fn()
@@ -33,9 +37,7 @@ function mount(options = {}) {
     get: (service) => {
       if (service === 'webServer') return webServer
       if (service === 'sessionQuery') {
-        return {
-          readSession: async () => (events === null ? null : { events }),
-        }
+        return { readSession }
       }
       return undefined
     },
@@ -292,6 +294,67 @@ test('wrong methods are refused rather than handled', async () => {
   assert.equal(state.statusCode, 405)
   const report = await call(routes, '/dsh-declutter/report', { method: 'GET', url: '/dsh-declutter/report' })
   assert.equal(report.statusCode, 405)
+})
+
+// --- state cache -------------------------------------------------------------
+
+const STATE_URL = '/dsh-declutter/state?sessionId=' + SESSION
+
+test('one session is served from one rebuild inside the cache window', async () => {
+  let reads = 0
+  const routes = mount({
+    readSession: async () => {
+      reads += 1
+      return { events: sameTurnRecovered }
+    },
+  })
+  const first = await call(routes, '/dsh-declutter/state', { url: STATE_URL })
+  const second = await call(routes, '/dsh-declutter/state', { url: STATE_URL })
+  assert.equal(first.statusCode, 200)
+  assert.equal(second.statusCode, 200)
+  assert.equal(reads, 1, 'the second poll must reuse the first payload')
+  assert.deepEqual(second.body, first.body)
+})
+
+test('a burst of /state calls shares a single rebuild instead of queueing one each', async () => {
+  let reads = 0
+  let release
+  const gate = new Promise((resolve) => {
+    release = resolve
+  })
+  const routes = mount({
+    readSession: async () => {
+      reads += 1
+      await gate
+      return { events: sameTurnRecovered }
+    },
+  })
+  const pending = Array.from({ length: 5 }, () => call(routes, '/dsh-declutter/state', { url: STATE_URL }))
+  await new Promise((resolve) => setImmediate(resolve))
+  release()
+  const results = await Promise.all(pending)
+  assert.equal(reads, 1, 'five polls must not start five rebuilds')
+  for (const result of results) assert.equal(result.statusCode, 200)
+})
+
+test('a view-side report invalidates the cached payload', async () => {
+  let reads = 0
+  const routes = mount({
+    readSession: async () => {
+      reads += 1
+      return { events: sameTurnRecovered }
+    },
+  })
+  await call(routes, '/dsh-declutter/state', { url: STATE_URL })
+  assert.equal(reads, 1)
+  const report = await call(routes, '/dsh-declutter/report', {
+    method: 'POST',
+    url: '/dsh-declutter/report',
+    body: JSON.stringify({ sessionId: SESSION, version: '0.2.4', rules: { 'r1.failed-turn': 'on' } }),
+  })
+  assert.equal(report.statusCode, 200)
+  await call(routes, '/dsh-declutter/state', { url: STATE_URL })
+  assert.equal(reads, 2, 'a new report must rebuild, not serve the stale verdicts')
 })
 
 // --- invariants --------------------------------------------------------------
