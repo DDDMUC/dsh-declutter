@@ -168,6 +168,62 @@ function createReportStore() {
   }
 }
 
+// --- state cache ------------------------------------------------------------
+
+/**
+ * Coalesce /state rebuilds.
+ *
+ * Building the payload reads the whole session log (sessionQuery.readSession deep
+ * freezes every event), so the cost grows with the transcript: a 15MB log takes
+ * seconds and hundreds of megabytes. The browser half polls every three seconds,
+ * so a single heavy session used to start a fresh rebuild per poll and starve the
+ * host (2026-11-23: 234 sockets, 2.4GB RSS, every request timed out).
+ *
+ * Two guards, both cheap: requests for one session share a single rebuild, and a
+ * payload computed moments ago is handed back as-is.
+ */
+const STATE_TTL_MS = 1500
+const STATE_CACHE_CAPACITY = 8
+
+function createStateCache() {
+  const cache = new Map()
+  const inflight = new Map()
+  return {
+    /**
+     * @param sessionId - normalized session id.
+     * @param build - async producer of the /state body, without the outer ok.
+     * @returns the body, fresh or shared.
+     */
+    async get(sessionId, build) {
+      const hit = cache.get(sessionId)
+      if (hit !== undefined && Date.now() - hit.at < STATE_TTL_MS) return hit.body
+      const pending = inflight.get(sessionId)
+      if (pending !== undefined) return pending
+      const job = (async () => {
+        const body = await build()
+        cache.delete(sessionId)
+        cache.set(sessionId, { at: Date.now(), body })
+        while (cache.size > STATE_CACHE_CAPACITY) {
+          const oldest = cache.keys().next()
+          if (oldest.done) break
+          cache.delete(oldest.value)
+        }
+        return body
+      })()
+      inflight.set(sessionId, job)
+      try {
+        return await job
+      } finally {
+        inflight.delete(sessionId)
+      }
+    },
+    /** Drop one session: a new view-side report changes the verdicts. */
+    invalidate(sessionId) {
+      cache.delete(sessionId)
+    },
+  }
+}
+
 // --- state -------------------------------------------------------------------
 
 /**
@@ -328,6 +384,7 @@ function failure(res, error) {
 export function apply(ctx, config = {}) {
   const resolved = resolveConfig(config)
   const reports = createReportStore()
+  const stateCache = createStateCache()
 
   const registerRoutes = (webServer, fiber) => {
     fiber.effect(() =>
@@ -342,7 +399,8 @@ export function apply(ctx, config = {}) {
           }
           try {
             const sessionId = requireSessionId(sessionIdFromQuery(req.url))
-            sendJson(res, 200, { ok: true, ...(await stateOf(ctx, sessionId, reports, resolved)) })
+            const body = await stateCache.get(sessionId, () => stateOf(ctx, sessionId, reports, resolved))
+            sendJson(res, 200, { ok: true, ...body })
           } catch (error) {
             failure(res, error)
           }
@@ -371,6 +429,8 @@ export function apply(ctx, config = {}) {
           try {
             const sessionId = requireSessionId(typeof body.sessionId === 'string' ? body.sessionId.trim() : '')
             const stored = reports.put(sessionId, body)
+            // The verdicts just changed, so the cached payload is stale.
+            stateCache.invalidate(sessionId)
             sendJson(res, 200, { ok: true, ...stored })
           } catch (error) {
             failure(res, error)
