@@ -1,6 +1,6 @@
 {
   "name": "dsh-declutter",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "DSH 界面收纳插件：把已经失败却后来成功的轮次、空轮、编辑产生的合成轮收起来——只改视图属性，完全可逆，绝不改会话日志；规则表化 + 逐条自检。",
   "type": "module",
   "main": "src/index.js",
