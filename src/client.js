@@ -469,6 +469,8 @@ window.__ModuleLoader__.load({
     // sidebar/DOM layer: stylesheet rules, panel stamping and ordering, session-
     // menu hiding, the settings page and its entry in the panel list. It keeps
     // its own storage keys so switches made before the merge survive.
+    let sidebarSettingsCard = null
+
     function mountSidebar(ctx) {
     const React = require('react')
     const h = React.createElement
@@ -2128,6 +2130,7 @@ window.__ModuleLoader__.load({
       }
 
       sidebarApply(ctx)
+      sidebarSettingsCard = SettingsCard
     }
     // ==== end sidebar half ===================================================
 
@@ -2176,6 +2179,7 @@ window.__ModuleLoader__.load({
     exports.apply = apply
     exports.inject = ['slots', 'locale']
     exports.version = VERSION
+    exports.__settings = { get SettingsCard() { return sidebarSettingsCard } }
     // Exported for the view-side unit tests, which run this file against a
     // minimal DOM stub instead of a browser.
     exports.__test = { sweep, sweepInjectedNodes, adoptNode, readTurn, wantedTurns, surfaceMounted, DeclutterController, NS, VERSION }
