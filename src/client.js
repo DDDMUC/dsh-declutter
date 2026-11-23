@@ -51,10 +51,12 @@ window.__ModuleLoader__.load({
     const react = require('react')
 
     const NS = 'dsh-declutter'
-    const VERSION = '0.2.0'
+    const VERSION = '0.2.4'
     const ROUTE_PREFIX = '/dsh-declutter'
     // Same cadence the sibling plugins use for transcript polling.
     const REFRESH_INTERVAL_MS = 3000
+    const REFRESH_MAX_MS = 30000
+    const STATE_TIMEOUT_MS = 15000
     // How often the view side is allowed to tell the host about its anchors.
     const REPORT_INTERVAL_MS = 2000
 
@@ -343,13 +345,30 @@ window.__ModuleLoader__.load({
         this.lastReportKey = ''
         this.observer = null
         this.timer = null
+        this.inFlight = false
+        this.nextDelay = REFRESH_INTERVAL_MS
       }
 
       async load() {
-        const response = await fetch(ROUTE_PREFIX + '/state?sessionId=' + encodeURIComponent(this.sessionId), {
-          credentials: 'same-origin',
-          headers: { accept: 'application/json' },
-        })
+        // One rebuild at a time: a slow /state used to pile up, one request per
+        // poll, which is what starved the host on a large transcript.
+        if (this.inFlight === true) return
+        this.inFlight = true
+        const controller = typeof AbortController === 'function' ? new AbortController() : null
+        const abortTimer = controller === null
+          ? null
+          : window.setTimeout(() => controller.abort(), STATE_TIMEOUT_MS)
+        let response
+        try {
+          response = await fetch(ROUTE_PREFIX + '/state?sessionId=' + encodeURIComponent(this.sessionId), {
+            credentials: 'same-origin',
+            headers: { accept: 'application/json' },
+            signal: controller === null ? undefined : controller.signal,
+          })
+        } finally {
+          if (abortTimer !== null) window.clearTimeout(abortTimer)
+          this.inFlight = false
+        }
         // 400 means the route is mounted but this request was rejected; 404 means
         // the plugin is not installed at all. Both leave the view untouched.
         if (!response.ok) throw new Error('state ' + response.status)
@@ -416,11 +435,22 @@ window.__ModuleLoader__.load({
             })
         }
         kick()
-        this.timer = window.setInterval(() => {
+        const tick = () => {
+          if (this.detached) return
           // Polling an off-screen tab is pure cost; resume on the next visible tick.
-          if (typeof document !== 'undefined' && document.hidden === true) return
+          if (typeof document !== 'undefined' && document.hidden === true) {
+            this.timer = window.setTimeout(tick, REFRESH_INTERVAL_MS)
+            return
+          }
+          const startedAt = Date.now()
           kick()
-        }, REFRESH_INTERVAL_MS)
+          // Back off when a rebuild is slow, never past the ceiling, and drop back
+          // to the base interval as soon as it is fast again.
+          const elapsed = Date.now() - startedAt
+          this.nextDelay = Math.min(Math.max(REFRESH_INTERVAL_MS, elapsed * 4), REFRESH_MAX_MS)
+          this.timer = window.setTimeout(tick, this.nextDelay)
+        }
+        this.timer = window.setTimeout(tick, REFRESH_INTERVAL_MS)
 
         // The trajectory view is a virtual list: it discards rows and creates new
         // ones as the user scrolls, so a marker placed once is gone almost
