@@ -81,6 +81,7 @@ window.__ModuleLoader__.load({
     // manage `data-dshdc-*`, so the collapsed state survives every re-render.
 
     const CSS = [
+      '[class*="_panelUnpin"]{display:none!important}',
       '[data-dshdc-collapsed="1"] > *:not([data-dshdc-toggle]){display:none!important}',
       '.dshdc-toggle{grid-column:1/-1;display:inline-flex;align-items:center;gap:6px;padding:2px 0;border:0;background:transparent;color:var(--dsw-alias-label-tertiary,#8a8f98);font:inherit;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));cursor:pointer;text-align:left}',
       '.dshdc-toggle:hover{color:var(--dsw-alias-label-secondary,#61666d)}',
