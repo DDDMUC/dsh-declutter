@@ -44,7 +44,7 @@
 export const PLUGIN_ID = 'dsh-declutter'
 
 /** Version, kept identical to package.json and src/client.js. */
-export const VERSION = '0.2.4'
+export const VERSION = '0.2.5'
 
 /** View namespace. Every injected attribute/element this plugin owns is prefixed with it. */
 export const NS = 'dshdc'
