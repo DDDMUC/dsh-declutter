@@ -51,7 +51,7 @@ window.__ModuleLoader__.load({
     const react = require('react')
 
     const NS = 'dsh-declutter'
-    const VERSION = '0.2.5'
+    const VERSION = '0.2.6'
     const ROUTE_PREFIX = '/dsh-declutter'
     // Same cadence the sibling plugins use for transcript polling.
     const REFRESH_INTERVAL_MS = 3000
@@ -1180,7 +1180,7 @@ window.__ModuleLoader__.load({
       '.dhns-sectionHead{position:relative;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}',
       '.dhns-sectionTitle{margin:0;font-size:13px;font-weight:600;',
       'letter-spacing:.02em;color:var(--dsw-alias-label-primary)}',
-      '.dhns-sectionHint{position:absolute;left:0;top:100%;z-index:6;max-width:min(560px,100%);margin-top:6px;padding:8px 10px;border-radius:8px;border:1px solid rgba(0,0,0,.08);background:var(--dsw-alias-bg-layer-2,#fff);box-shadow:0 6px 20px rgba(0,0,0,.10);font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary,#666);opacity:0;pointer-events:none;transition:opacity .12s}',
+      '.dhns-sectionHint{position:absolute;left:0;top:100%;z-index:6;max-width:min(560px,100%);margin-top:6px;padding:8px 10px;border-radius:8px;border:1px solid rgba(0,0,0,.08);background:var(--dsw-alias-bg-layer-2,#fff);box-shadow:0 6px 20px rgba(0,0,0,.10);font-size:12px;line-height:18px;color:var(--dsw-alias-label-primary,#111);opacity:0;pointer-events:none;transition:opacity .12s}',
       '.dhns-sectionHead:hover .dhns-sectionHint{opacity:1}',
       '.dhns-rows{display:flex;flex-direction:column;gap:8px}',
       '.dhns-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}',
